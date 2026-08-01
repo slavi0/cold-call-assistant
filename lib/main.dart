@@ -1,0 +1,76 @@
+import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:provider/provider.dart';
+
+import 'features/contacts/models/contact_model.dart';
+import 'features/calls/models/call_model.dart';
+import 'features/recordings/models/recording_model.dart';
+import 'features/excel_import/models/excel_table_model.dart';
+
+import 'features/contacts/services/contact_service.dart';
+import 'features/calls/services/call_service.dart';
+import 'features/recordings/services/recording_service.dart';
+import 'features/excel_import/services/excel_table_service.dart';
+
+import 'features/calls/providers/phone_call_provider.dart';
+import 'features/calls/views/phone_call_screen.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialise Hive with the Flutter path provider so it resolves the
+  // correct documents directory on each platform.
+  await Hive.initFlutter();
+
+  // Register all type adapters before opening any box.
+  // TypeId allocation:
+  //   0  ContactModel
+  //   1  CallModel
+  //   2  RecordingModel
+  //   3  ExcelTableModel
+  //  10  ContactStatus (enum)
+  //  11  CallDirection  (enum)
+  //  12  CallOutcome    (enum)
+  //  13  TranscriptStatus (enum)
+  Hive
+    ..registerAdapter(ContactModelAdapter())
+    ..registerAdapter(ContactStatusAdapter())
+    ..registerAdapter(CallModelAdapter())
+    ..registerAdapter(CallDirectionAdapter())
+    ..registerAdapter(CallOutcomeAdapter())
+    ..registerAdapter(RecordingModelAdapter())
+    ..registerAdapter(TranscriptStatusAdapter())
+    ..registerAdapter(ExcelTableModelAdapter());
+
+  // Open all boxes at startup so services can access them synchronously.
+  await Future.wait([
+    ContactService.openBox(),
+    CallService.openBox(),
+    RecordingService.openBox(),
+    ExcelTableService.openBox(),
+  ]);
+
+  runApp(const ColdCallAssistantApp());
+}
+
+class ColdCallAssistantApp extends StatelessWidget {
+  const ColdCallAssistantApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => PhoneCallProvider()),
+      ],
+      child: MaterialApp(
+        title: 'Cold Call Assistant',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          useMaterial3: true,
+        ),
+        home: const PhoneCallScreen(),
+      ),
+    );
+  }
+}
