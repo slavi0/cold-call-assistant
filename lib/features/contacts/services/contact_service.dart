@@ -108,4 +108,45 @@ class ContactService {
       throw StorageException('Failed to delete contact.', cause: e);
     }
   }
+
+  /// Seeds 10 dummy contacts into the box if it is currently empty.
+  ///
+  /// Called once at app startup so the app launches with usable data without
+  /// requiring the user to import an Excel file first.
+  /// All contacts share the same demo phone number and differ only by name,
+  /// which is sufficient for testing the calling workflow.
+  Future<void> seedDummyContactsIfEmpty() async {
+    if (_box.isNotEmpty) return;
+
+    const demoPhone = '+33177455329';
+    const demoNames = [
+      'Alice Martin',
+      'Bob Dupont',
+      'Clara Fontaine',
+      'David Leclerc',
+      'Eva Rousseau',
+      'François Bernard',
+      'Grace Morel',
+      'Hugo Petit',
+      'Isabelle Girard',
+      'Julien Lambert',
+    ];
+
+    try {
+      final now = DateTime.now();
+      for (final name in demoNames) {
+        final contact = ContactModel(
+          id: _uuid.v4(),
+          name: name,
+          phoneNumber: demoPhone,
+          createdAt: now,
+          updatedAt: now,
+          status: ContactStatus.newContact,
+        );
+        await _box.put(contact.id, contact);
+      }
+    } catch (e) {
+      throw StorageException('Failed to seed dummy contacts.', cause: e);
+    }
+  }
 }

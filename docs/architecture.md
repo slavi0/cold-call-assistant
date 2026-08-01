@@ -20,16 +20,27 @@ lib/
         contact_status.dart    # Enum: CRM pipeline stages
         contact_model.dart     # ContactModel + Hive adapter
         contact_model.g.dart   # Hive adapter (hand-written)
+      providers/
+        contact_provider.dart  # Loads/seeds contact list state
       services/
-        contact_service.dart   # All contact persistence operations
+        contact_service.dart   # All contact persistence + dummy seed
+      views/
+        contacts_screen.dart   # Contact list + "Start Calling" button
+        contact_detail_screen.dart  # Contact info + "Call" button + sequence auto-advance
     calls/
       models/
         call_direction.dart    # Enum: outgoing / incoming
         call_outcome.dart      # Enum: completed / noAnswer / etc.
         call_model.dart        # CallModel + Hive adapter
         call_model.g.dart      # Hive adapters
+      providers/
+        phone_call_provider.dart        # Telephony state (loading, error, active)
+        calling_sequence_provider.dart  # Workflow state (index, auto-advance)
       services/
         call_service.dart      # All call persistence operations
+        phone_call_service.dart # Telephony intents (ACTION_CALL / ACTION_DIAL)
+      views/
+        home_screen.dart       # App entry point — navigates to contacts
     recordings/
       models/
         transcript_status.dart # Enum: none / pending / completed / failed
@@ -44,7 +55,7 @@ lib/
       services/
         excel_table_service.dart # All import record operations
   shared/                        # (future reusable widgets)
-  main.dart                      # Hive init + adapter registration + app root
+  main.dart                      # Hive init + adapter registration + named routes
 ```
 
 ---
@@ -152,11 +163,11 @@ All service methods throw typed exceptions from `core/exceptions/app_exception.d
 ### Direct Phone Calling & Intent Handling
 - **Service**: `PhoneCallService` (`lib/features/calls/services/phone_call_service.dart`)
 - **Provider**: `PhoneCallProvider` (`lib/features/calls/providers/phone_call_provider.dart`)
-- **View**: `PhoneCallScreen` (`lib/features/calls/views/phone_call_screen.dart`)
+- **View**: `ContactDetailScreen` (`lib/features/contacts/views/contact_detail_screen.dart`) — replaced the deleted `PhoneCallScreen`; hosts the `WidgetsBindingObserver` and Call button.
 - **Direct Calling (`Intent.ACTION_CALL`)**: Uses `flutter_phone_direct_caller` and `permission_handler` to initiate calls immediately without dialer confirmation when runtime `CALL_PHONE` permission is granted.
 - **Dialer Fallback (`Intent.ACTION_DIAL`)**: Uses `url_launcher` as fallback if permission is denied.
 - **Android Manifest Configuration**: Added `<uses-permission android:name="android.permission.CALL_PHONE" />` and `<queries>` filter for `android.intent.action.DIAL` with `tel` scheme in `android/app/src/main/AndroidManifest.xml`.
-- **App Lifecycle Auto-Return**: `PhoneCallScreen` implements `WidgetsBindingObserver` to observe `AppLifecycleState.resumed`. When the in-call UI closes after a call finishes, standard Android activity navigation reveals the app, and `PhoneCallProvider.handleAppResumed()` resets UI state.
+- **App Lifecycle Auto-Return**: `ContactDetailScreen` implements `WidgetsBindingObserver`. On `AppLifecycleState.resumed`, it calls `PhoneCallProvider.handleAppResumed()` and `CallingSequenceProvider.advanceToNext()` (if in sequence mode).
 
 ### Android Rendering: Black Screen Root Cause & Fix
 
@@ -170,6 +181,56 @@ Impeller has documented surface-lifecycle bugs with rapid foreground/background 
 
 **Temporary lifecycle logging** (`Log.d("CCA_LIFECYCLE", …)` in `MainActivity.kt`):  
 Overrides of `onCreate`, `onStart`, `onResume`, `onPause`, `onStop`, `onRestart` allow `adb logcat -s CCA_LIFECYCLE` to confirm exactly which callbacks fire during each call scenario. Remove these log statements once the fix is confirmed stable in production.
+
+---
+
+## Contact Calling Workflow
+
+### Navigation
+Named routes via `MaterialApp.routes`:
+
+| Route | Screen | Purpose |
+|---|---|---|
+| `/` | `HomeScreen` | App entry point |
+| `/contacts` | `ContactsScreen` | Contact list + Start Calling |
+| `/contact-detail` | `ContactDetailScreen` | Contact info + Call button |
+
+### Calling Sequence State Machine
+
+```
+ContactsScreen — "Start Calling" pressed
+    │
+    ▼  CallingSequenceProvider.startSequence(contacts)
+    │
+    ▼  Navigate to /contact-detail (contact[0])
+    │
+ContactDetailScreen — user presses "Call"
+    │
+    ▼  PhoneCallProvider.initiateCall(phoneNumber)
+    │
+    ▼  (app goes to background — system Phone app in foreground)
+    │
+    ▼  Call ends — app returns to foreground
+    │
+    ▼  didChangeAppLifecycleState(resumed)
+    │   ├─ PhoneCallProvider.handleAppResumed()  (reset telephony state)
+    │   └─ CallingSequenceProvider.advanceToNext()
+    │       ├─ nextContact exists → Navigator.pushReplacementNamed('/contact-detail', args: next)
+    │       └─ sequence complete  → Navigator.popUntil('/contacts')
+```
+
+### Provider Responsibilities
+
+| Provider | Responsibility |
+|---|---|
+| `PhoneCallProvider` | Telephony state only (loading, error, fallback result) |
+| `CallingSequenceProvider` | Workflow state (index, active flag, advance logic) |
+| `ContactProvider` | Contact list data (loaded from `ContactService`) |
+
+The two call-related providers are deliberately separate: neither knows about the other, and the view coordinates them via `context.read<>()`.
+
+### Dummy Data Seeding
+`ContactService.seedDummyContactsIfEmpty()` creates 10 named contacts on first launch if the Hive box is empty. `ContactProvider.seedAndLoad()` triggers this at startup. The seed is idempotent — it no-ops if any contacts already exist.
 
 ---
 

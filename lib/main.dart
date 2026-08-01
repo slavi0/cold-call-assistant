@@ -12,8 +12,13 @@ import 'features/calls/services/call_service.dart';
 import 'features/recordings/services/recording_service.dart';
 import 'features/excel_import/services/excel_table_service.dart';
 
+import 'features/contacts/providers/contact_provider.dart';
 import 'features/calls/providers/phone_call_provider.dart';
-import 'features/calls/views/phone_call_screen.dart';
+import 'features/calls/providers/calling_sequence_provider.dart';
+
+import 'features/calls/views/home_screen.dart';
+import 'features/contacts/views/contacts_screen.dart';
+import 'features/contacts/views/contact_detail_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,6 +66,11 @@ class ColdCallAssistantApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => PhoneCallProvider()),
+        ChangeNotifierProvider(create: (_) => CallingSequenceProvider()),
+        // ContactProvider seeds + loads contacts on creation.
+        ChangeNotifierProvider(
+          create: (_) => ContactProvider()..seedAndLoad(),
+        ),
       ],
       child: MaterialApp(
         title: 'Cold Call Assistant',
@@ -69,7 +79,13 @@ class ColdCallAssistantApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
           useMaterial3: true,
         ),
-        home: const PhoneCallScreen(),
+        // Named routes keep navigation declarative and testable.
+        initialRoute: '/',
+        routes: {
+          '/': (_) => const HomeScreen(),
+          '/contacts': (_) => const ContactsScreen(),
+          '/contact-detail': (_) => const ContactDetailScreen(),
+        },
       ),
     );
   }
