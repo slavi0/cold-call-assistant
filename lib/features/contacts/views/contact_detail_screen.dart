@@ -17,10 +17,8 @@ import '../../calls/services/phone_call_service.dart';
 /// **Two navigation contexts**:
 /// - *Browsing mode*: user tapped a contact in the list.
 ///   - Previous/Next buttons navigate through the full contact list.
-///   - After a call ends → opens [PostCallReviewScreen]; user stays in the
-///     same browsing session afterwards.
+///   - After a call ends → opens [PostCallReviewScreen].
 /// - *Sequence mode*: user pressed "Start Calling".
-///   - Previous/Next buttons still navigate through the full list.
 ///   - After a call ends → opens [PostCallReviewScreen] with sequence context;
 ///     "Next Contact" on that screen advances the sequence.
 class ContactDetailScreen extends StatefulWidget {
@@ -34,7 +32,6 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
     with WidgetsBindingObserver {
   late String _contactId;
   bool _initialized = false;
-  bool _callWasInitiated = false;
 
   @override
   void didChangeDependencies() {
@@ -49,34 +46,32 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    debugPrint('CCA_DEBUG: ContactDetailScreen initState — observer registered');
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    debugPrint('CCA_DEBUG: ContactDetailScreen dispose — observer removed');
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _callWasInitiated) {
-      _callWasInitiated = false;
-      // Reset telephony state first (clears loading/active flags).
-      context.read<PhoneCallProvider>().handleAppResumed();
-      // Defer navigation until after the first frame is rendered.
-      //
-      // Root cause of the black screen regression:
-      // AppLifecycleState.resumed fires inside Android's onResume() — the
-      // activity is transitioning into the foreground but FlutterTextureView
-      // has not yet produced a single rendered frame in the resumed state.
-      // Calling Navigator.pushNamed synchronously here starts a route-transition
-      // animation while the rendering pipeline is still starting up, causing a
-      // black screen even with RenderMode.texture + Impeller disabled.
-      //
-      // addPostFrameCallback guarantees the callback runs after the next frame
-      // is fully rasterised, at which point the pipeline is stable and can
-      // safely handle a route transition animation.
+    // Log ALL lifecycle transitions, not just resumed, to see the full sequence.
+    final provider = context.read<PhoneCallProvider>();
+    debugPrint(
+      'CCA_DEBUG: didChangeAppLifecycleState: $state | '
+      'isCallActive=${provider.isCallActive} | '
+      'isLoading=${provider.isLoading}',
+    );
+
+    if (state == AppLifecycleState.resumed && provider.isCallActive) {
+      debugPrint('CCA_DEBUG: Call ended — resetting provider and scheduling navigation');
+      provider.handleAppResumed();
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        debugPrint('CCA_DEBUG: postFrameCallback fired — mounted=$mounted');
         if (mounted) {
           _openPostCallReview();
         }
@@ -87,6 +82,9 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
   void _openPostCallReview() {
     final isSequence =
         context.read<CallingSequenceProvider>().isSequenceActive;
+    debugPrint(
+      'CCA_DEBUG: _openPostCallReview — contactId=$_contactId isSequence=$isSequence',
+    );
     Navigator.pushNamed(
       context,
       '/post-call-review',
@@ -154,10 +152,7 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
                     )
                 : null,
           ),
-          _CallButton(
-            contact: contact,
-            onCallInitiated: () => setState(() => _callWasInitiated = true),
-          ),
+          _CallButton(contact: contact),
         ],
       ),
     );
@@ -328,16 +323,9 @@ class _NavigationButtons extends StatelessWidget {
 }
 
 class _CallButton extends StatelessWidget {
-  const _CallButton({
-    required this.contact,
-    required this.onCallInitiated,
-  });
+  const _CallButton({required this.contact});
 
   final ContactModel contact;
-
-  /// Callback invoked immediately after the call is initiated so the parent
-  /// state can set `_callWasInitiated = true` and respond to lifecycle events.
-  final VoidCallback onCallInitiated;
 
   @override
   Widget build(BuildContext context) {
@@ -385,13 +373,23 @@ class _CallButton extends StatelessWidget {
     BuildContext context,
     PhoneCallProvider provider,
   ) async {
+    debugPrint('CCA_DEBUG: _handleCallPressed — calling ${contact.phoneNumber}');
+
     final success = await provider.initiateCall(contact.phoneNumber!);
 
-    if (!context.mounted) return;
+    // Log context.mounted AFTER the await — this is the critical check point.
+    debugPrint(
+      'CCA_DEBUG: initiateCall returned — success=$success '
+      'context.mounted=${context.mounted} '
+      'provider.isCallActive=${provider.isCallActive}',
+    );
 
-    if (success) {
-      onCallInitiated();
-    } else if (provider.errorMessage != null) {
+    if (!context.mounted) {
+      debugPrint('CCA_DEBUG: context not mounted — onCallInitiated will NOT be called');
+      return;
+    }
+
+    if (!success && provider.errorMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(provider.errorMessage!),
