@@ -25,13 +25,15 @@ class ContactModelAdapter extends TypeAdapter<ContactModel> {
       createdAt: fields[7] as DateTime,
       updatedAt: fields[8] as DateTime,
       importedFromTableId: fields[9] as String?,
+      // field[10] may be absent in records written before schema version 2.
+      lastCalledAt: fields[10] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, ContactModel obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(11) // total number of fields
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -51,7 +53,9 @@ class ContactModelAdapter extends TypeAdapter<ContactModel> {
       ..writeByte(8)
       ..write(obj.updatedAt)
       ..writeByte(9)
-      ..write(obj.importedFromTableId);
+      ..write(obj.importedFromTableId)
+      ..writeByte(10)
+      ..write(obj.lastCalledAt);
   }
 
   @override

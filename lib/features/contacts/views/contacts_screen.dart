@@ -68,7 +68,7 @@ class ContactsScreen extends StatelessWidget {
     Navigator.pushNamed(
       context,
       '/contact-detail',
-      arguments: contact,
+      arguments: contact.id,
     );
   }
 }
@@ -144,11 +144,11 @@ class _StartCallingButton extends StatelessWidget {
     // Start the sequence in the provider — no navigation logic here.
     context.read<CallingSequenceProvider>().startSequence(contacts);
 
-    // Navigate to the first contact's detail screen.
+    // Navigate to the first contact's detail screen using its ID.
     Navigator.pushNamed(
       context,
       '/contact-detail',
-      arguments: contacts.first,
+      arguments: contacts.first.id,
     );
   }
 }

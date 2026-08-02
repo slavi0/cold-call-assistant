@@ -55,7 +55,8 @@ lib/
       services/
         excel_table_service.dart # All import record operations
   shared/                        # (future reusable widgets)
-  main.dart                      # Hive init + adapter registration + named routes
+      post_call_review_screen.dart  # Post-call review: status dropdown + notes
+  main.dart                      # Hive init + adapter registration + schema migration + named routes
 ```
 
 ---
@@ -121,9 +122,24 @@ This means migrating to Supabase = rewriting service classes only. Views and pro
 ### Contact
 - `recordings` removed from Contact — recordings belong to a `Call`, not directly to a `Contact`
 - `company` added — essential for cold-call CRM use cases
-- `status` (enum) added — enables pipeline tracking without querying call history
+- `status` (`ContactStatus` enum) — post-call outcome set by the salesperson on the review screen
+- `lastCalledAt` added (HiveField 10) — records when the contact was last reviewed; set automatically when the post-call review is submitted. Avoids loading all `CallModel`s just to show "last called" info.
 - `createdAt` / `updatedAt` added — for sorting and future sync
 - `importedFromTableId` added — links contacts back to their import batch
+
+### ContactStatus enum
+Six post-call outcome values (must never be reordered — Hive serialises by index):
+
+| Index | Name | Display Label |
+|---|---|---|
+| 0 | `interested` | Interested |
+| 1 | `notInterested` | Not Interested |
+| 2 | `actionRequired` | Action Required |
+| 3 | `callLater` | Call Later |
+| 4 | `didntPickUp` | Didn't Pick Up |
+| 5 | `doesntExist` | Doesn't Exist |
+
+Display labels are provided by `ContactStatusLabel.displayLabel` (an extension on the enum), keeping UI strings out of the model file.
 
 ### Call
 - `contactId` added — explicit foreign key; avoids orphaned records
@@ -193,7 +209,12 @@ Named routes via `MaterialApp.routes`:
 |---|---|---|
 | `/` | `HomeScreen` | App entry point |
 | `/contacts` | `ContactsScreen` | Contact list + Start Calling |
-| `/contact-detail` | `ContactDetailScreen` | Contact info + Call button |
+| `/contact-detail` | `ContactDetailScreen` | Contact info + Call + Prev/Next |
+| `/post-call-review` | `PostCallReviewScreen` | Status + Notes after each call |
+
+Route arguments:
+- `/contact-detail` receives a `String` (contactId). The screen reads the live `ContactModel` from `ContactProvider.findById()` — never holds a local copy.
+- `/post-call-review` receives a `Map<String, dynamic>` with `contactId` (String) and `isSequenceMode` (bool).
 
 ### Calling Sequence State Machine
 
@@ -202,7 +223,7 @@ ContactsScreen — "Start Calling" pressed
     │
     ▼  CallingSequenceProvider.startSequence(contacts)
     │
-    ▼  Navigate to /contact-detail (contact[0])
+    ▼  Navigate to /contact-detail (contactId)
     │
 ContactDetailScreen — user presses "Call"
     │
@@ -212,22 +233,38 @@ ContactDetailScreen — user presses "Call"
     │
     ▼  Call ends — app returns to foreground
     │
-    ▼  didChangeAppLifecycleState(resumed)
-    │   ├─ PhoneCallProvider.handleAppResumed()  (reset telephony state)
-    │   └─ CallingSequenceProvider.advanceToNext()
-    │       ├─ nextContact exists → Navigator.pushReplacementNamed('/contact-detail', args: next)
-    │       └─ sequence complete  → Navigator.popUntil('/contacts')
+    ▼  didChangeAppLifecycleState(resumed) → _callWasInitiated == true
+    │   ├─ PhoneCallProvider.handleAppResumed()
+    │   └─ Navigator.pushNamed('/post-call-review', {contactId, isSequenceMode})
+    │
+PostCallReviewScreen — user updates status & notes → presses "Next Contact"
+    │
+    ▼  ContactProvider.updateContact(contact.copyWith(status, notes, lastCalledAt))
+    │
+    ▼  CallingSequenceProvider.advanceToNext()
+    │   ├─ nextContact exists → Navigator.pushReplacementNamed('/contact-detail', args: nextId)
+    │   └─ sequence complete  → Navigator.popUntil('/contacts')
 ```
+
+### ContactDetailScreen Prev/Next Navigation
+Previous/Next buttons appear on every `ContactDetailScreen`. They navigate through the full `ContactProvider.contacts` list regardless of sequence mode:
+- Use `Navigator.pushReplacementNamed` so the back-stack does not grow while browsing.
+- Disabled at list boundaries (first/last contact).
+- Do **not** interact with `CallingSequenceProvider` — they are for browsing only.
+
+### State Synchronisation
+`ContactProvider` is the single source of truth. Screens read contacts via `ContactProvider.findById(id)` (`context.watch`) rather than storing local copies. When `updateContact()` is called (on review submission), the provider calls `reload()` and notifies all watchers. Every screen on the stack rebuilds with the fresh data automatically.
 
 ### Provider Responsibilities
 
 | Provider | Responsibility |
 |---|---|
 | `PhoneCallProvider` | Telephony state only (loading, error, fallback result) |
-| `CallingSequenceProvider` | Workflow state (index, active flag, advance logic) |
-| `ContactProvider` | Contact list data (loaded from `ContactService`) |
+| `CallingSequenceProvider` | Sequence progression (index, active flag, advance) |
+| `ContactProvider` | Single source of truth for all contact data |
 
-The two call-related providers are deliberately separate: neither knows about the other, and the view coordinates them via `context.read<>()`.
+### Schema Migration
+A primitive Hive box (`'schema'`) stores an integer version per domain. If `ContactsSchemaVersion` stored ≠ `_contactsSchemaVersion` in `main.dart`, the contacts box is cleared before seeding, preventing stale enum-index reads from incompatible stored data.
 
 ### Dummy Data Seeding
 `ContactService.seedDummyContactsIfEmpty()` creates 10 named contacts on first launch if the Hive box is empty. `ContactProvider.seedAndLoad()` triggers this at startup. The seed is idempotent — it no-ops if any contacts already exist.

@@ -63,7 +63,7 @@ class ContactService {
     String? email,
     String? notes,
     String? importedFromTableId,
-    ContactStatus status = ContactStatus.newContact,
+    ContactStatus status = ContactStatus.callLater,
   }) async {
     try {
       final now = DateTime.now();
@@ -141,7 +141,7 @@ class ContactService {
           phoneNumber: demoPhone,
           createdAt: now,
           updatedAt: now,
-          status: ContactStatus.newContact,
+          status: ContactStatus.callLater,
         );
         await _box.put(contact.id, contact);
       }

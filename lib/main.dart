@@ -19,6 +19,17 @@ import 'features/calls/providers/calling_sequence_provider.dart';
 import 'features/calls/views/home_screen.dart';
 import 'features/contacts/views/contacts_screen.dart';
 import 'features/contacts/views/contact_detail_screen.dart';
+import 'features/contacts/views/post_call_review_screen.dart';
+
+/// Schema version for the contacts Hive box.
+///
+/// Increment this constant whenever:
+/// - A [ContactModel] field is added or removed.
+/// - The [ContactStatus] enum values are reordered or replaced.
+///
+/// On a version mismatch, the contacts box is cleared and re-seeded so
+/// existing data with incompatible indices is not misread.
+const _contactsSchemaVersion = 2;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,13 +58,25 @@ Future<void> main() async {
     ..registerAdapter(TranscriptStatusAdapter())
     ..registerAdapter(ExcelTableModelAdapter());
 
-  // Open all boxes at startup so services can access them synchronously.
+  // Open all feature boxes at startup so services can access them synchronously.
   await Future.wait([
     ContactService.openBox(),
     CallService.openBox(),
     RecordingService.openBox(),
     ExcelTableService.openBox(),
   ]);
+
+  // ── Schema migration ──────────────────────────────────────────────────────
+  // A primitive int box stores schema version numbers (no adapter needed).
+  // If the stored version doesn't match _contactsSchemaVersion, the contacts
+  // box is cleared so old records with incompatible enum indices are removed.
+  // The ContactProvider will re-seed on next startup.
+  final schemaBox = await Hive.openBox<int>('schema');
+  final storedVersion = schemaBox.get('contacts') ?? 0;
+  if (storedVersion != _contactsSchemaVersion) {
+    await Hive.box<ContactModel>('contacts').clear();
+    await schemaBox.put('contacts', _contactsSchemaVersion);
+  }
 
   runApp(const ColdCallAssistantApp());
 }
@@ -85,6 +108,7 @@ class ColdCallAssistantApp extends StatelessWidget {
           '/': (_) => const HomeScreen(),
           '/contacts': (_) => const ContactsScreen(),
           '/contact-detail': (_) => const ContactDetailScreen(),
+          '/post-call-review': (_) => const PostCallReviewScreen(),
         },
       ),
     );

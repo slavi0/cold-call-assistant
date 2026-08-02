@@ -1,23 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/contact_model.dart';
+import '../models/contact_status.dart';
+import '../providers/contact_provider.dart';
 import '../../calls/providers/phone_call_provider.dart';
 import '../../calls/providers/calling_sequence_provider.dart';
 import '../../calls/services/phone_call_service.dart';
 
-/// Displays a single contact's details and provides a "Call" button.
+/// Displays a single contact's details, a Call button, and Prev/Next navigation.
 ///
-/// Supports two modes:
-/// - **Single-call mode**: user tapped a contact from the list. When the call
-///   ends the user stays on this screen (normal back-navigation applies).
-/// - **Sequence mode**: user pressed "Start Calling". When [didChangeAppLifecycleState]
-///   fires `resumed`, [CallingSequenceProvider.advanceToNext] is called:
-///   - If there is a next contact, this screen replaces itself with the next
-///     contact's detail screen via [Navigator.pushReplacement].
-///   - If the sequence is complete, this screen pops back to [ContactsScreen].
+/// **Route argument**: `String` — the contact's ID.
+/// The actual [ContactModel] is always read from [ContactProvider.findById] so
+/// that any edits made on [PostCallReviewScreen] are immediately visible here
+/// without needing to reload or pass updated objects through route arguments.
 ///
-/// The [WidgetsBindingObserver] is used (same pattern as the old PhoneCallScreen)
-/// to detect when the user returns from the system Phone app.
+/// **Two navigation contexts**:
+/// - *Browsing mode*: user tapped a contact in the list.
+///   - Previous/Next buttons navigate through the full contact list.
+///   - After a call ends → opens [PostCallReviewScreen]; user stays in the
+///     same browsing session afterwards.
+/// - *Sequence mode*: user pressed "Start Calling".
+///   - Previous/Next buttons still navigate through the full list.
+///   - After a call ends → opens [PostCallReviewScreen] with sequence context;
+///     "Next Contact" on that screen advances the sequence.
 class ContactDetailScreen extends StatefulWidget {
   const ContactDetailScreen({super.key});
 
@@ -27,7 +32,7 @@ class ContactDetailScreen extends StatefulWidget {
 
 class _ContactDetailScreenState extends State<ContactDetailScreen>
     with WidgetsBindingObserver {
-  late ContactModel _contact;
+  late String _contactId;
   bool _initialized = false;
   bool _callWasInitiated = false;
 
@@ -35,9 +40,7 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_initialized) {
-      // Route argument is the ContactModel for this screen.
-      _contact =
-          ModalRoute.of(context)!.settings.arguments as ContactModel;
+      _contactId = ModalRoute.of(context)!.settings.arguments as String;
       _initialized = true;
     }
   }
@@ -58,48 +61,52 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _callWasInitiated) {
       _callWasInitiated = false;
-      // Always reset telephony state first.
+      // Reset telephony state first (clears loading/active flags).
       context.read<PhoneCallProvider>().handleAppResumed();
-      // Then check if we are in sequence mode.
-      _handleCallEnded();
+      // Navigate to post-call review regardless of sequence mode.
+      // PostCallReviewScreen handles the difference internally.
+      _openPostCallReview();
     }
   }
 
-  void _handleCallEnded() {
-    final sequenceProvider = context.read<CallingSequenceProvider>();
-
-    if (!sequenceProvider.isSequenceActive) {
-      // Single-call mode: nothing extra to do — user stays on this screen.
-      return;
-    }
-
-    final nextContact = sequenceProvider.advanceToNext();
-
-    if (nextContact == null) {
-      // Sequence complete — pop back to ContactsScreen.
-      Navigator.popUntil(context, ModalRoute.withName('/contacts'));
-    } else {
-      // Replace the current screen with the next contact's detail screen.
-      // Using pushReplacement prevents the back-stack from growing indefinitely
-      // during a long calling session.
-      Navigator.pushReplacementNamed(
-        context,
-        '/contact-detail',
-        arguments: nextContact,
-      );
-    }
+  void _openPostCallReview() {
+    final isSequence =
+        context.read<CallingSequenceProvider>().isSequenceActive;
+    Navigator.pushNamed(
+      context,
+      '/post-call-review',
+      arguments: {
+        'contactId': _contactId,
+        'isSequenceMode': isSequence,
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    // Watch the provider so this screen rebuilds whenever the contact is updated
+    // (e.g. after returning from PostCallReviewScreen).
+    final contact =
+        context.watch<ContactProvider>().findById(_contactId);
+
+    if (contact == null) {
+      return const Scaffold(
+        body: Center(child: Text('Contact not found.')),
+      );
+    }
+
+    // Compute previous/next using the live contact list.
+    final contacts = context.watch<ContactProvider>().contacts;
+    final index = contacts.indexWhere((c) => c.id == _contactId);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_contact.name),
+        title: Text(contact.name),
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            // If the user manually navigates back during a sequence, cancel it.
+            // Cancel the sequence if the user explicitly backs out.
             context.read<CallingSequenceProvider>().cancelSequence();
             Navigator.pop(context);
           },
@@ -110,11 +117,30 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),
-              child: _ContactInfoCard(contact: _contact),
+              child: _ContactInfoCard(contact: contact),
             ),
           ),
+          // Previous / Next navigation row — always visible.
+          _NavigationButtons(
+            hasPrevious: index > 0,
+            hasNext: index >= 0 && index < contacts.length - 1,
+            onPrevious: index > 0
+                ? () => Navigator.pushReplacementNamed(
+                      context,
+                      '/contact-detail',
+                      arguments: contacts[index - 1].id,
+                    )
+                : null,
+            onNext: index >= 0 && index < contacts.length - 1
+                ? () => Navigator.pushReplacementNamed(
+                      context,
+                      '/contact-detail',
+                      arguments: contacts[index + 1].id,
+                    )
+                : null,
+          ),
           _CallButton(
-            contact: _contact,
+            contact: contact,
             onCallInitiated: () => setState(() => _callWasInitiated = true),
           ),
         ],
@@ -169,14 +195,25 @@ class _ContactInfoCard extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 32),
-        _InfoRow(icon: Icons.phone, label: 'Phone', value: contact.phoneNumber ?? '—'),
+        _InfoRow(
+            icon: Icons.phone,
+            label: 'Phone',
+            value: contact.phoneNumber ?? '—'),
         if (contact.email != null)
-          _InfoRow(icon: Icons.email, label: 'Email', value: contact.email!),
+          _InfoRow(
+              icon: Icons.email, label: 'Email', value: contact.email!),
         _InfoRow(
           icon: Icons.flag_rounded,
           label: 'Status',
-          value: _statusLabel(contact.status.name),
+          // Use the displayLabel extension instead of raw camelCase.
+          value: contact.status.displayLabel,
         ),
+        if (contact.lastCalledAt != null)
+          _InfoRow(
+            icon: Icons.access_time_rounded,
+            label: 'Last Called',
+            value: _formatDate(contact.lastCalledAt!),
+          ),
         if (contact.notes != null && contact.notes!.isNotEmpty) ...[
           const SizedBox(height: 16),
           const Text(
@@ -190,12 +227,12 @@ class _ContactInfoCard extends StatelessWidget {
     );
   }
 
-  String _statusLabel(String raw) {
-    // Convert camelCase enum name to readable label.
-    return raw
-        .replaceAllMapped(RegExp(r'[A-Z]'), (m) => ' ${m.group(0)}')
-        .trim()
-        .replaceFirst(raw[0], raw[0].toUpperCase());
+  String _formatDate(DateTime dt) {
+    return '${dt.day.toString().padLeft(2, '0')}/'
+        '${dt.month.toString().padLeft(2, '0')}/'
+        '${dt.year}  '
+        '${dt.hour.toString().padLeft(2, '0')}:'
+        '${dt.minute.toString().padLeft(2, '0')}';
   }
 }
 
@@ -223,11 +260,50 @@ class _InfoRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: const TextStyle(
-                        fontSize: 12, color: Colors.grey)),
-                Text(value,
-                    style: const TextStyle(fontSize: 16)),
+                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                Text(value, style: const TextStyle(fontSize: 16)),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NavigationButtons extends StatelessWidget {
+  const _NavigationButtons({
+    required this.hasPrevious,
+    required this.hasNext,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final bool hasPrevious;
+  final bool hasNext;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: onPrevious,
+              icon: const Icon(Icons.chevron_left),
+              label: const Text('Previous'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: onNext,
+              icon: const Icon(Icons.chevron_right),
+              iconAlignment: IconAlignment.end,
+              label: const Text('Next'),
             ),
           ),
         ],
@@ -252,7 +328,7 @@ class _CallButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 36),
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 36),
       child: Consumer<PhoneCallProvider>(
         builder: (context, provider, child) {
           return ElevatedButton.icon(
@@ -294,13 +370,11 @@ class _CallButton extends StatelessWidget {
     BuildContext context,
     PhoneCallProvider provider,
   ) async {
-    final phoneNumber = contact.phoneNumber!;
-    final success = await provider.initiateCall(phoneNumber);
+    final success = await provider.initiateCall(contact.phoneNumber!);
 
     if (!context.mounted) return;
 
     if (success) {
-      // Notify parent that a call was launched so lifecycle events are handled.
       onCallInitiated();
     } else if (provider.errorMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
