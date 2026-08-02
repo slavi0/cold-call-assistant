@@ -49,9 +49,15 @@ class _PostCallReviewScreenState extends State<PostCallReviewScreen> {
       _contactId = args['contactId'] as String;
       _isSequenceMode = args['isSequenceMode'] as bool;
 
-      // Pre-populate form fields from the current contact state.
-      final contact =
-          context.read<ContactProvider>().findById(_contactId);
+      debugPrint(
+        'CCA_DEBUG: [PostCallReview] didChangeDependencies — '
+        'contactId=$_contactId isSequenceMode=$_isSequenceMode',
+      );
+
+      final contact = context.read<ContactProvider>().findById(_contactId);
+      debugPrint(
+        'CCA_DEBUG: [PostCallReview] contact lookup — found=${contact != null}',
+      );
       if (contact != null) {
         _selectedStatus = contact.status;
         _notesController.text = contact.notes ?? '';
@@ -124,6 +130,10 @@ class _PostCallReviewScreenState extends State<PostCallReviewScreen> {
     // Watch the provider so this screen rebuilds if the contact changes.
     final contact =
         context.watch<ContactProvider>().findById(_contactId);
+
+    debugPrint(
+      'CCA_DEBUG: [PostCallReview] build — contact=${contact?.name ?? "NULL"}',
+    );
 
     if (contact == null) {
       return const Scaffold(

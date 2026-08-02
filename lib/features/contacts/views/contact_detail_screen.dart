@@ -55,27 +55,43 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    debugPrint('CCA_DEBUG: [ContactDetail] initState — observer registered');
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    debugPrint('CCA_DEBUG: [ContactDetail] dispose — observer removed');
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    final provider = context.read<PhoneCallProvider>();
+    debugPrint(
+      'CCA_DEBUG: [ContactDetail] lifecycle=$state | '
+      'isCallActive=${provider.isCallActive} | '
+      'mounted=$mounted',
+    );
+
     if (state == AppLifecycleState.resumed) {
-      final provider = context.read<PhoneCallProvider>();
       if (provider.isCallActive) {
+        debugPrint('CCA_DEBUG: [ContactDetail] CYCLE-1 resume — scheduling navigation');
         provider.handleAppResumed();
-        // Defer navigation until after the first frame is rendered so that the
-        // route-transition animation starts on a stable rendering pipeline.
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          debugPrint(
+            'CCA_DEBUG: [ContactDetail] postFrameCallback fired — mounted=$mounted',
+          );
           if (mounted) {
             _openPostCallReview();
+          } else {
+            debugPrint('CCA_DEBUG: [ContactDetail] NOT mounted — navigation skipped');
           }
         });
+      } else {
+        debugPrint(
+          'CCA_DEBUG: [ContactDetail] CYCLE-2 resume — isCallActive=false, no nav',
+        );
       }
     }
   }
@@ -83,6 +99,11 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
   void _openPostCallReview() {
     final isSequence =
         context.read<CallingSequenceProvider>().isSequenceActive;
+    debugPrint(
+      'CCA_DEBUG: [Navigation] pushNamed /post-call-review — '
+      'contactId=$_contactId isSequence=$isSequence '
+      'mounted=$mounted',
+    );
     Navigator.pushNamed(
       context,
       '/post-call-review',
@@ -91,6 +112,7 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
         'isSequenceMode': isSequence,
       },
     );
+    debugPrint('CCA_DEBUG: [Navigation] pushNamed returned (call was synchronous)');
   }
 
   @override

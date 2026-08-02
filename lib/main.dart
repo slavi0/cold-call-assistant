@@ -81,6 +81,42 @@ Future<void> main() async {
   runApp(const ColdCallAssistantApp());
 }
 
+/// Logs every Navigator route transition so we can confirm whether
+/// [Navigator.pushNamed] actually results in a route being pushed,
+/// and whether any unexpected pops occur.
+class _CcaNavigatorObserver extends NavigatorObserver {
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    debugPrint(
+      'CCA_NAV: PUSH ${route.settings.name ?? route.runtimeType} '
+      '(from ${previousRoute?.settings.name ?? previousRoute?.runtimeType})',
+    );
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    debugPrint(
+      'CCA_NAV: POP ${route.settings.name ?? route.runtimeType} '
+      '(returning to ${previousRoute?.settings.name ?? previousRoute?.runtimeType})',
+    );
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    debugPrint(
+      'CCA_NAV: REMOVE ${route.settings.name ?? route.runtimeType}',
+    );
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    debugPrint(
+      'CCA_NAV: REPLACE ${oldRoute?.settings.name} '
+      'WITH ${newRoute?.settings.name}',
+    );
+  }
+}
+
 class ColdCallAssistantApp extends StatelessWidget {
   const ColdCallAssistantApp({super.key});
 
@@ -102,6 +138,7 @@ class ColdCallAssistantApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
           useMaterial3: true,
         ),
+        navigatorObservers: [_CcaNavigatorObserver()],
         // Named routes keep navigation declarative and testable.
         initialRoute: '/',
         routes: {
