@@ -63,9 +63,24 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
       _callWasInitiated = false;
       // Reset telephony state first (clears loading/active flags).
       context.read<PhoneCallProvider>().handleAppResumed();
-      // Navigate to post-call review regardless of sequence mode.
-      // PostCallReviewScreen handles the difference internally.
-      _openPostCallReview();
+      // Defer navigation until after the first frame is rendered.
+      //
+      // Root cause of the black screen regression:
+      // AppLifecycleState.resumed fires inside Android's onResume() — the
+      // activity is transitioning into the foreground but FlutterTextureView
+      // has not yet produced a single rendered frame in the resumed state.
+      // Calling Navigator.pushNamed synchronously here starts a route-transition
+      // animation while the rendering pipeline is still starting up, causing a
+      // black screen even with RenderMode.texture + Impeller disabled.
+      //
+      // addPostFrameCallback guarantees the callback runs after the next frame
+      // is fully rasterised, at which point the pipeline is stable and can
+      // safely handle a route transition animation.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _openPostCallReview();
+        }
+      });
     }
   }
 
