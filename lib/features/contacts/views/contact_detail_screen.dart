@@ -21,6 +21,15 @@ import '../../calls/services/phone_call_service.dart';
 /// - *Sequence mode*: user pressed "Start Calling".
 ///   - After a call ends → opens [PostCallReviewScreen] with sequence context;
 ///     "Next Contact" on that screen advances the sequence.
+///
+/// **Black-screen lifecycle note (confirmed 2026-08-02)**:
+/// When a call is placed via Intent.ACTION_CALL and quickly cancelled, the
+/// Android Phone system processes the cancellation asynchronously, causing a
+/// second lifecycle cycle (inactive → hidden → paused) AFTER our app has
+/// already resumed and shown [PostCallReviewScreen]. On Cycle 2's return the
+/// Flutter renderer re-attaches to a fresh SurfaceTexture. The brief gap before
+/// the first rendered frame was showing black; this is fixed at the Android
+/// level by setting the window background to white in [MainActivity].
 class ContactDetailScreen extends StatefulWidget {
   const ContactDetailScreen({super.key});
 
@@ -46,45 +55,34 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    debugPrint('CCA_DEBUG: ContactDetailScreen initState — observer registered');
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    debugPrint('CCA_DEBUG: ContactDetailScreen dispose — observer removed');
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Log ALL lifecycle transitions, not just resumed, to see the full sequence.
-    final provider = context.read<PhoneCallProvider>();
-    debugPrint(
-      'CCA_DEBUG: didChangeAppLifecycleState: $state | '
-      'isCallActive=${provider.isCallActive} | '
-      'isLoading=${provider.isLoading}',
-    );
-
-    if (state == AppLifecycleState.resumed && provider.isCallActive) {
-      debugPrint('CCA_DEBUG: Call ended — resetting provider and scheduling navigation');
-      provider.handleAppResumed();
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        debugPrint('CCA_DEBUG: postFrameCallback fired — mounted=$mounted');
-        if (mounted) {
-          _openPostCallReview();
-        }
-      });
+    if (state == AppLifecycleState.resumed) {
+      final provider = context.read<PhoneCallProvider>();
+      if (provider.isCallActive) {
+        provider.handleAppResumed();
+        // Defer navigation until after the first frame is rendered so that the
+        // route-transition animation starts on a stable rendering pipeline.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _openPostCallReview();
+          }
+        });
+      }
     }
   }
 
   void _openPostCallReview() {
     final isSequence =
         context.read<CallingSequenceProvider>().isSequenceActive;
-    debugPrint(
-      'CCA_DEBUG: _openPostCallReview — contactId=$_contactId isSequence=$isSequence',
-    );
     Navigator.pushNamed(
       context,
       '/post-call-review',
@@ -215,7 +213,6 @@ class _ContactInfoCard extends StatelessWidget {
         _InfoRow(
           icon: Icons.flag_rounded,
           label: 'Status',
-          // Use the displayLabel extension instead of raw camelCase.
           value: contact.status.displayLabel,
         ),
         if (contact.lastCalledAt != null)
@@ -373,21 +370,9 @@ class _CallButton extends StatelessWidget {
     BuildContext context,
     PhoneCallProvider provider,
   ) async {
-    debugPrint('CCA_DEBUG: _handleCallPressed — calling ${contact.phoneNumber}');
-
     final success = await provider.initiateCall(contact.phoneNumber!);
 
-    // Log context.mounted AFTER the await — this is the critical check point.
-    debugPrint(
-      'CCA_DEBUG: initiateCall returned — success=$success '
-      'context.mounted=${context.mounted} '
-      'provider.isCallActive=${provider.isCallActive}',
-    );
-
-    if (!context.mounted) {
-      debugPrint('CCA_DEBUG: context not mounted — onCallInitiated will NOT be called');
-      return;
-    }
+    if (!context.mounted) return;
 
     if (!success && provider.errorMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
