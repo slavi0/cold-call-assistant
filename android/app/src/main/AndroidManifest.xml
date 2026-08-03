@@ -3,6 +3,14 @@
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
+    <!--
+        Required to draw the floating overlay button above all other apps
+        (including the system Phone dialer) while a cold-call sequence is active.
+        On Android 6+ (API 23+) the user must grant this via a dedicated system
+        settings screen; it cannot be granted via a normal runtime permission dialog.
+    -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <application
         android:label="cold_call_assistant"
         android:name="${applicationName}"
@@ -39,6 +47,14 @@
         <meta-data
             android:name="io.flutter.embedding.android.EnableImpeller"
             android:value="false" />
+
+        <!--
+            FloatingOverlayService draws the return button above the Phone dialer.
+            exported="false" — only our own app can start this service.
+        -->
+        <service
+            android:name=".FloatingOverlayService"
+            android:exported="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

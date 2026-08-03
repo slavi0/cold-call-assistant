@@ -124,7 +124,7 @@ class ColdCallAssistantApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => PhoneCallProvider()),
+        ChangeNotifierProvider(create: (_) => PhoneCallProvider()..initialize()),
         ChangeNotifierProvider(create: (_) => CallingSequenceProvider()),
         // ContactProvider seeds + loads contacts on creation.
         ChangeNotifierProvider(

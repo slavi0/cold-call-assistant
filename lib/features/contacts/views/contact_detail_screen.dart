@@ -22,14 +22,12 @@ import '../../calls/services/phone_call_service.dart';
 ///   - After a call ends → opens [PostCallReviewScreen] with sequence context;
 ///     "Next Contact" on that screen advances the sequence.
 ///
-/// **Black-screen lifecycle note (confirmed 2026-08-02)**:
-/// When a call is placed via Intent.ACTION_CALL and quickly cancelled, the
-/// Android Phone system processes the cancellation asynchronously, causing a
-/// second lifecycle cycle (inactive → hidden → paused) AFTER our app has
-/// already resumed and shown [PostCallReviewScreen]. On Cycle 2's return the
-/// Flutter renderer re-attaches to a fresh SurfaceTexture. The brief gap before
-/// the first rendered frame was showing black; this is fixed at the Android
-/// level by setting the window background to white in [MainActivity].
+/// **Return-from-call flow (overlay button)**:
+/// When the user taps the floating overlay button after a call, the native side
+/// calls back into Flutter via the MethodChannel. [PhoneCallProvider] sets
+/// [PhoneCallProvider.pendingReviewContactId]. This screen's [addListener]
+/// subscription detects the signal and schedules navigation via
+/// [addPostFrameCallback], replacing the old [WidgetsBindingObserver] approach.
 class ContactDetailScreen extends StatefulWidget {
   const ContactDetailScreen({super.key});
 
@@ -37,8 +35,7 @@ class ContactDetailScreen extends StatefulWidget {
   State<ContactDetailScreen> createState() => _ContactDetailScreenState();
 }
 
-class _ContactDetailScreenState extends State<ContactDetailScreen>
-    with WidgetsBindingObserver {
+class _ContactDetailScreenState extends State<ContactDetailScreen> {
   late String _contactId;
   bool _initialized = false;
 
@@ -48,62 +45,50 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
     if (!_initialized) {
       _contactId = ModalRoute.of(context)!.settings.arguments as String;
       _initialized = true;
-    }
-  }
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    debugPrint('CCA_DEBUG: [ContactDetail] initState — observer registered');
+      final provider = context.read<PhoneCallProvider>();
+
+      // Subscribe to overlay button tap notifications.
+      // When [PhoneCallProvider.pendingReviewContactId] matches this screen's
+      // contact, we navigate to PostCallReviewScreen.
+      provider.addListener(_onPhoneCallProviderChanged);
+
+      // Eagerly check the overlay permission so the banner renders correctly
+      // without a visible flash.
+      provider.refreshOverlayPermission();
+    }
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    debugPrint('CCA_DEBUG: [ContactDetail] dispose — observer removed');
+    // Remove the listener to avoid callbacks on a disposed State.
+    context.read<PhoneCallProvider>().removeListener(_onPhoneCallProviderChanged);
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    final provider = context.read<PhoneCallProvider>();
-    debugPrint(
-      'CCA_DEBUG: [ContactDetail] lifecycle=$state | '
-      'isCallActive=${provider.isCallActive} | '
-      'mounted=$mounted',
-    );
+  // ── Overlay button tap handler ─────────────────────────────────────────
 
-    if (state == AppLifecycleState.resumed) {
-      if (provider.isCallActive) {
-        debugPrint('CCA_DEBUG: [ContactDetail] CYCLE-1 resume — scheduling navigation');
-        provider.handleAppResumed();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          debugPrint(
-            'CCA_DEBUG: [ContactDetail] postFrameCallback fired — mounted=$mounted',
-          );
-          if (mounted) {
-            _openPostCallReview();
-          } else {
-            debugPrint('CCA_DEBUG: [ContactDetail] NOT mounted — navigation skipped');
-          }
-        });
-      } else {
-        debugPrint(
-          'CCA_DEBUG: [ContactDetail] CYCLE-2 resume — isCallActive=false, no nav',
-        );
-      }
-    }
+  void _onPhoneCallProviderChanged() {
+    final provider = context.read<PhoneCallProvider>();
+
+    // Only act when the pending navigation belongs to this screen's contact.
+    if (provider.pendingReviewContactId != _contactId) return;
+    if (!mounted) return;
+
+    // Consume the signal immediately to prevent double-navigation if the
+    // listener fires more than once before the frame is rendered.
+    provider.clearPendingReview();
+
+    // Schedule navigation after the current frame to avoid calling
+    // setState/Navigator inside a build cycle.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _openPostCallReview();
+    });
   }
 
   void _openPostCallReview() {
     final isSequence =
         context.read<CallingSequenceProvider>().isSequenceActive;
-    debugPrint(
-      'CCA_DEBUG: [Navigation] pushNamed /post-call-review — '
-      'contactId=$_contactId isSequence=$isSequence '
-      'mounted=$mounted',
-    );
     Navigator.pushNamed(
       context,
       '/post-call-review',
@@ -112,15 +97,15 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
         'isSequenceMode': isSequence,
       },
     );
-    debugPrint('CCA_DEBUG: [Navigation] pushNamed returned (call was synchronous)');
   }
+
+  // ── Build ──────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    // Watch the provider so this screen rebuilds whenever the contact is updated
-    // (e.g. after returning from PostCallReviewScreen).
-    final contact =
-        context.watch<ContactProvider>().findById(_contactId);
+    // Watch the provider so this screen rebuilds whenever the contact is
+    // updated (e.g. after returning from PostCallReviewScreen).
+    final contact = context.watch<ContactProvider>().findById(_contactId);
 
     if (contact == null) {
       return const Scaffold(
@@ -132,6 +117,10 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
     final contacts = context.watch<ContactProvider>().contacts;
     final index = contacts.indexWhere((c) => c.id == _contactId);
 
+    final isSequence =
+        context.watch<CallingSequenceProvider>().isSequenceActive;
+    final phoneProvider = context.watch<PhoneCallProvider>();
+
     return Scaffold(
       appBar: AppBar(
         title: Text(contact.name),
@@ -139,14 +128,23 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            // Cancel the sequence if the user explicitly backs out.
+            // Cancel the sequence and dismiss the overlay if the user backs out.
             context.read<CallingSequenceProvider>().cancelSequence();
+            context.read<PhoneCallProvider>().dismissOverlay();
             Navigator.pop(context);
           },
         ),
       ),
       body: Column(
         children: [
+          // Show the overlay permission banner only during an active sequence
+          // and only if the SYSTEM_ALERT_WINDOW permission is not yet granted.
+          // The banner is non-blocking — the user can dismiss it and continue
+          // calling; they will just need to return to the app manually.
+          if (isSequence && !phoneProvider.overlayPermissionGranted)
+            _OverlayPermissionBanner(
+              onAllow: () => phoneProvider.requestOverlayPermission(),
+            ),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),
@@ -180,6 +178,40 @@ class _ContactDetailScreenState extends State<ContactDetailScreen>
 }
 
 // ── Private sub-widgets ────────────────────────────────────────────────────
+
+/// Amber banner shown at the top of the screen when the overlay permission
+/// has not been granted. Non-blocking — the user can ignore it.
+class _OverlayPermissionBanner extends StatelessWidget {
+  const _OverlayPermissionBanner({required this.onAllow});
+
+  final VoidCallback onAllow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: Colors.amber.shade100,
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, size: 18, color: Colors.amber),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'Allow "Display over other apps" to show the Return button '
+              'above the dialer.',
+              style: TextStyle(fontSize: 12),
+            ),
+          ),
+          TextButton(
+            onPressed: onAllow,
+            child: const Text('Allow'),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _ContactInfoCard extends StatelessWidget {
   const _ContactInfoCard({required this.contact});
@@ -392,7 +424,11 @@ class _CallButton extends StatelessWidget {
     BuildContext context,
     PhoneCallProvider provider,
   ) async {
-    final success = await provider.initiateCall(contact.phoneNumber!);
+    // Pass contact.id so the overlay service knows which review screen to open.
+    final success = await provider.initiateCall(
+      contact.phoneNumber!,
+      contact.id,
+    );
 
     if (!context.mounted) return;
 
