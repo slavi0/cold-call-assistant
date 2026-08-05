@@ -13,6 +13,13 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Cold Call Assistant'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_rounded),
+            tooltip: 'Contact Sources',
+            onPressed: () => Navigator.pushNamed(context, '/settings'),
+          ),
+        ],
       ),
       body: Center(
         child: Padding(

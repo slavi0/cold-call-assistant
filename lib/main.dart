@@ -11,15 +11,19 @@ import 'features/contacts/services/contact_service.dart';
 import 'features/calls/services/call_service.dart';
 import 'features/recordings/services/recording_service.dart';
 import 'features/excel_import/services/excel_table_service.dart';
+import 'features/contact_sources/services/contact_source_service.dart';
 
 import 'features/contacts/providers/contact_provider.dart';
 import 'features/calls/providers/phone_call_provider.dart';
 import 'features/calls/providers/calling_sequence_provider.dart';
+import 'features/contact_sources/providers/contact_source_provider.dart';
 
 import 'features/calls/views/home_screen.dart';
 import 'features/contacts/views/contacts_screen.dart';
 import 'features/contacts/views/contact_detail_screen.dart';
 import 'features/contacts/views/post_call_review_screen.dart';
+import 'features/contact_sources/views/contact_sources_screen.dart';
+import 'features/contact_sources/views/google_sheets_config_screen.dart';
 
 /// Schema version for the contacts Hive box.
 ///
@@ -64,6 +68,7 @@ Future<void> main() async {
     CallService.openBox(),
     RecordingService.openBox(),
     ExcelTableService.openBox(),
+    ContactSourceService.openBox(),
   ]);
 
   // ── Schema migration ──────────────────────────────────────────────────────
@@ -81,41 +86,6 @@ Future<void> main() async {
   runApp(const ColdCallAssistantApp());
 }
 
-/// Logs every Navigator route transition so we can confirm whether
-/// [Navigator.pushNamed] actually results in a route being pushed,
-/// and whether any unexpected pops occur.
-class _CcaNavigatorObserver extends NavigatorObserver {
-  @override
-  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    debugPrint(
-      'CCA_NAV: PUSH ${route.settings.name ?? route.runtimeType} '
-      '(from ${previousRoute?.settings.name ?? previousRoute?.runtimeType})',
-    );
-  }
-
-  @override
-  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    debugPrint(
-      'CCA_NAV: POP ${route.settings.name ?? route.runtimeType} '
-      '(returning to ${previousRoute?.settings.name ?? previousRoute?.runtimeType})',
-    );
-  }
-
-  @override
-  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    debugPrint(
-      'CCA_NAV: REMOVE ${route.settings.name ?? route.runtimeType}',
-    );
-  }
-
-  @override
-  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
-    debugPrint(
-      'CCA_NAV: REPLACE ${oldRoute?.settings.name} '
-      'WITH ${newRoute?.settings.name}',
-    );
-  }
-}
 
 class ColdCallAssistantApp extends StatelessWidget {
   const ColdCallAssistantApp({super.key});
@@ -130,6 +100,10 @@ class ColdCallAssistantApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => ContactProvider()..seedAndLoad(),
         ),
+        // ContactSourceProvider loads configured sources on creation.
+        ChangeNotifierProvider(
+          create: (_) => ContactSourceProvider()..load(),
+        ),
       ],
       child: MaterialApp(
         title: 'Cold Call Assistant',
@@ -138,7 +112,6 @@ class ColdCallAssistantApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
           useMaterial3: true,
         ),
-        navigatorObservers: [_CcaNavigatorObserver()],
         // Named routes keep navigation declarative and testable.
         initialRoute: '/',
         routes: {
@@ -146,6 +119,8 @@ class ColdCallAssistantApp extends StatelessWidget {
           '/contacts': (_) => const ContactsScreen(),
           '/contact-detail': (_) => const ContactDetailScreen(),
           '/post-call-review': (_) => const PostCallReviewScreen(),
+          '/settings': (_) => const ContactSourcesScreen(),
+          '/settings/google-sheets': (_) => const GoogleSheetsConfigScreen(),
         },
       ),
     );
