@@ -1,8 +1,10 @@
-// GENERATED CODE — DO NOT EDIT BY HAND
-// Hive type adapter for ContactModel.
-// TypeId: 0
+// GENERATED CODE - DO NOT MODIFY BY HAND
 
 part of 'contact_model.dart';
+
+// **************************************************************************
+// TypeAdapterGenerator
+// **************************************************************************
 
 class ContactModelAdapter extends TypeAdapter<ContactModel> {
   @override
@@ -17,23 +19,24 @@ class ContactModelAdapter extends TypeAdapter<ContactModel> {
     return ContactModel(
       id: fields[0] as String,
       name: fields[1] as String,
+      createdAt: fields[7] as DateTime,
+      updatedAt: fields[8] as DateTime,
       company: fields[2] as String?,
       phoneNumber: fields[3] as String?,
       email: fields[4] as String?,
       notes: fields[5] as String?,
       status: fields[6] as ContactStatus,
-      createdAt: fields[7] as DateTime,
-      updatedAt: fields[8] as DateTime,
       importedFromTableId: fields[9] as String?,
-      // field[10] may be absent in records written before schema version 2.
       lastCalledAt: fields[10] as DateTime?,
+      syncStatus: fields[11] as SyncStatus,
+      syncRetryCount: fields[12] as int,
     );
   }
 
   @override
   void write(BinaryWriter writer, ContactModel obj) {
     writer
-      ..writeByte(11) // total number of fields
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -55,7 +58,11 @@ class ContactModelAdapter extends TypeAdapter<ContactModel> {
       ..writeByte(9)
       ..write(obj.importedFromTableId)
       ..writeByte(10)
-      ..write(obj.lastCalledAt);
+      ..write(obj.lastCalledAt)
+      ..writeByte(11)
+      ..write(obj.syncStatus)
+      ..writeByte(12)
+      ..write(obj.syncRetryCount);
   }
 
   @override
@@ -65,32 +72,6 @@ class ContactModelAdapter extends TypeAdapter<ContactModel> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is ContactModelAdapter &&
-          runtimeType == other.runtimeType &&
-          typeId == other.typeId;
-}
-
-// Hive type adapter for ContactStatus enum.
-class ContactStatusAdapter extends TypeAdapter<ContactStatus> {
-  @override
-  final int typeId = 10;
-
-  @override
-  ContactStatus read(BinaryReader reader) {
-    return ContactStatus.values[reader.readByte()];
-  }
-
-  @override
-  void write(BinaryWriter writer, ContactStatus obj) {
-    writer.writeByte(obj.index);
-  }
-
-  @override
-  int get hashCode => typeId.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ContactStatusAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

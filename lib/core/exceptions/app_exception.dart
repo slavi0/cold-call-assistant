@@ -30,3 +30,30 @@ class StorageException extends AppException {
 class DeviceException extends AppException {
   const DeviceException(super.message, {super.cause});
 }
+
+/// Thrown when an operation involving the Google Sheets API fails.
+///
+/// The [message] is always user-friendly and can be displayed directly in the UI.
+/// Common causes: invalid URL, access denied (403), spreadsheet not found (404),
+/// missing worksheet, network errors, or authentication failures.
+class GoogleSheetsException extends AppException {
+  const GoogleSheetsException(super.message, {super.cause});
+}
+
+/// Thrown when a row from a contact source cannot be converted to a [ContactModel].
+///
+/// Used by [ContactImportService] to record per-row failures in the
+/// [ContactImportSummary] without aborting the entire import.
+class ContactImportException extends AppException {
+  const ContactImportException(super.message, {super.cause});
+}
+
+/// Thrown when a background sync operation fails for a specific contact.
+///
+/// Caught by [SyncProvider] to record the failure, increment
+/// [ContactModel.syncRetryCount], and schedule a retry with backoff.
+/// Sub-classify using specific messages rather than sub-types — the
+/// engine only needs to decide "retry" vs. "give up", not inspect the cause.
+class SyncException extends AppException {
+  const SyncException(super.message, {super.cause});
+}

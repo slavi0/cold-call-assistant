@@ -47,6 +47,20 @@ class ContactSourceService {
     }
   }
 
+  /// Returns the [ContactSource] with [id], or null if not found.
+  ///
+  /// Used by [SyncProvider] to resolve [ContactModel.importedFromTableId]
+  /// without loading every source into memory unnecessarily.
+  ContactSource? findById(String id) {
+    final jsonString = _box.get(id);
+    if (jsonString == null) return null;
+    try {
+      return ContactSource.fromJsonString(jsonString);
+    } on FormatException {
+      return null;
+    }
+  }
+
   /// Persists a [ContactSource], creating or overwriting the entry for its ID.
   Future<void> save(ContactSource source) async {
     try {

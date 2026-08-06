@@ -1,5 +1,6 @@
 import 'package:hive/hive.dart';
 import 'contact_status.dart';
+import 'sync_status.dart';
 
 part 'contact_model.g.dart';
 
@@ -29,6 +30,8 @@ class ContactModel extends HiveObject {
     this.status = ContactStatus.callLater,
     this.importedFromTableId,
     this.lastCalledAt,
+    this.syncStatus = SyncStatus.noSource,
+    this.syncRetryCount = 0,
   });
 
   /// RFC-4122 UUID. Using UUIDs instead of auto-increment ints makes
@@ -80,6 +83,33 @@ class ContactModel extends HiveObject {
   @HiveField(10)
   DateTime? lastCalledAt;
 
+  // ── Sync state ─────────────────────────────────────────────────────────────
+  //
+  // These two fields are appended after all original fields so that existing
+  // Hive records (written before Phase 3) can still be read without a
+  // migration. Hive's generated reader maps fields by their @HiveField index,
+  // not by position, so missing fields receive their constructor defaults.
+
+  /// Whether this contact's local state has been pushed to its origin source.
+  ///
+  /// Set to [SyncStatus.synced] immediately after import (the contact just
+  /// came from the sheet). Changed to [SyncStatus.pendingSync] whenever
+  /// [ContactProvider.updateContact] is called. [SyncProvider] transitions
+  /// through [SyncStatus.syncing] → [SyncStatus.synced] or [SyncStatus.failed].
+  @HiveField(11)
+  SyncStatus syncStatus;
+
+  /// Number of consecutive sync failures for this contact.
+  ///
+  /// Reset to 0 when:
+  /// - A sync succeeds ([SyncStatus.synced]).
+  /// - The user edits the contact again (re-edit = fresh start).
+  ///
+  /// Used by [SyncProvider] to determine the next backoff delay and whether
+  /// the maximum retry limit has been reached.
+  @HiveField(12)
+  int syncRetryCount;
+
   /// Creates a copy of this model with updated fields.
   /// Used by providers to update state immutably.
   ///
@@ -95,6 +125,8 @@ class ContactModel extends HiveObject {
     DateTime? updatedAt,
     String? importedFromTableId,
     DateTime? lastCalledAt,
+    SyncStatus? syncStatus,
+    int? syncRetryCount,
   }) {
     return ContactModel(
       id: id,
@@ -108,6 +140,8 @@ class ContactModel extends HiveObject {
       updatedAt: updatedAt ?? this.updatedAt,
       importedFromTableId: importedFromTableId ?? this.importedFromTableId,
       lastCalledAt: lastCalledAt ?? this.lastCalledAt,
+      syncStatus: syncStatus ?? this.syncStatus,
+      syncRetryCount: syncRetryCount ?? this.syncRetryCount,
     );
   }
 
@@ -127,6 +161,8 @@ class ContactModel extends HiveObject {
       'updated_at': updatedAt.toIso8601String(),
       'imported_from_table_id': importedFromTableId,
       'last_called_at': lastCalledAt?.toIso8601String(),
+      'sync_status': syncStatus.name,
+      'sync_retry_count': syncRetryCount,
     };
   }
 }

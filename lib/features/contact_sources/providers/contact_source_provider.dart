@@ -1,26 +1,38 @@
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:uuid/uuid.dart';
+
 import '../models/contact_source.dart';
 import '../models/contact_source_test_result.dart';
 import '../services/contact_source_service.dart';
+import '../services/google_sheets_integration.dart';
 import '../../../core/exceptions/app_exception.dart';
 
-/// Manages the list of configured contact sources.
+/// Manages the list of configured contact sources and Google Sign-In state.
 ///
-/// Acts as the single source of truth for contact source configuration state.
-/// All screens read and modify sources through this provider — they never
-/// interact with [ContactSourceService] or Hive directly.
+/// Acts as the single source of truth for:
+/// - The list of saved [ContactSource] configurations.
+/// - Whether the user is signed in to Google (shared state with
+///   [ContactImportProvider] via the injected [GoogleSheetsIntegration]).
+/// - The result and error message from the last "Test Connection" call.
 ///
-/// ## Lifecycle
-/// [load] is called at app startup (wired in [main.dart]).
-/// Subsequent changes (add, update, remove) are immediately reflected in
-/// [sources] without requiring a full reload.
+/// ## Sign-in sharing
+/// A single [GoogleSheetsIntegration] instance is created in [main.dart] and
+/// injected into both this provider and [ContactImportProvider]. Both providers
+/// therefore share the same OAuth session — signing in from the settings screen
+/// immediately makes the import button functional.
 class ContactSourceProvider extends ChangeNotifier {
-  ContactSourceProvider({ContactSourceService? service})
-      : _service = service ?? ContactSourceService();
+  ContactSourceProvider({
+    ContactSourceService? service,
+    GoogleSheetsIntegration? sheetsIntegration,
+  })  : _service = service ?? ContactSourceService(),
+        _sheets = sheetsIntegration ?? GoogleSheetsIntegration();
 
   final ContactSourceService _service;
+  final GoogleSheetsIntegration _sheets;
   final _uuid = const Uuid();
+
+  // ── Sources ────────────────────────────────────────────────────────────────
 
   List<ContactSource> _sources = [];
 
@@ -33,16 +45,35 @@ class ContactSourceProvider extends ChangeNotifier {
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
-  /// True while [testSource] is executing. Use to disable the Test button
-  /// and show a loading indicator.
+  // ── Google auth state ──────────────────────────────────────────────────────
+
+  GoogleSignInAccount? _googleAccount;
+
+  /// The currently signed-in Google account, or null.
+  GoogleSignInAccount? get googleAccount => _googleAccount;
+
+  bool get isSignedInToGoogle => _googleAccount != null;
+
+  /// Email of the signed-in Google account for display in the UI.
+  String? get googleAccountEmail => _googleAccount?.email;
+
+  bool _isSigningIn = false;
+  bool get isSigningIn => _isSigningIn;
+
+  // ── Test Connection state ──────────────────────────────────────────────────
+
   bool _isTesting = false;
   bool get isTesting => _isTesting;
 
+  /// User-facing error description when [testSource] returns
+  /// [ContactSourceTestResult.failed]. Null on success.
+  String? _testErrorMessage;
+  String? get testErrorMessage => _testErrorMessage;
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
-  /// Loads all configured sources from persistent storage.
-  ///
-  /// Should be called once at app startup after the Hive box is open.
+  /// Loads all configured sources and attempts a silent Google Sign-In to
+  /// restore the user's previous session without prompting.
   Future<void> load() async {
     _isLoading = true;
     _errorMessage = null;
@@ -52,9 +83,12 @@ class ContactSourceProvider extends ChangeNotifier {
       _sources = _service.loadAll();
     } on AppException catch (e) {
       _errorMessage = e.message;
-    } catch (e) {
+    } catch (_) {
       _errorMessage = 'Failed to load contact sources.';
     }
+
+    // Restore previous session silently — never prompts the user.
+    _googleAccount = await _sheets.signInSilently();
 
     _isLoading = false;
     notifyListeners();
@@ -90,7 +124,7 @@ class ContactSourceProvider extends ChangeNotifier {
     }
   }
 
-  /// Removes the source with [id] from storage and from [sources].
+  /// Removes the source with [id] from storage and [sources].
   Future<void> removeSource(String id) async {
     _errorMessage = null;
     try {
@@ -108,30 +142,61 @@ class ContactSourceProvider extends ChangeNotifier {
   /// Generates a new RFC-4122 UUID for use as a source ID.
   String generateId() => _uuid.v4();
 
+  // ── Authentication ─────────────────────────────────────────────────────────
+
+  /// Triggers the interactive Google Sign-In dialog.
+  Future<void> signInToGoogle() async {
+    _isSigningIn = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      _googleAccount = await _sheets.signIn();
+    } on GoogleSheetsException catch (e) {
+      _errorMessage = e.message;
+    } catch (e) {
+      _errorMessage = 'Sign-in failed. Please try again.';
+    }
+
+    _isSigningIn = false;
+    notifyListeners();
+  }
+
+  /// Signs the user out and clears all cached Google credentials.
+  Future<void> signOutFromGoogle() async {
+    await _sheets.signOut();
+    _googleAccount = null;
+    notifyListeners();
+  }
+
   // ── Connection Testing ─────────────────────────────────────────────────────
 
-  /// Tests the connection to [source].
+  /// Tests the connection to [source] and returns the outcome.
   ///
-  /// **Phase 1 — placeholder**: always returns
-  /// [ContactSourceTestResult.notImplemented] after a brief artificial delay
-  /// so the loading state is visible to the user.
-  ///
-  /// **Phase 2**: replace the switch body with real API calls per source type.
-  /// The switch is intentionally exhaustive — adding a new source type will
+  /// On failure, [testErrorMessage] is set to a user-displayable description.
+  /// The switch is exhaustive — adding a new [ContactSource] subtype will
   /// produce a compile error here until its test logic is implemented.
   Future<ContactSourceTestResult> testSource(ContactSource source) async {
     _isTesting = true;
+    _testErrorMessage = null;
     notifyListeners();
 
-    // Simulate network latency so the loading indicator is visible.
-    await Future.delayed(const Duration(milliseconds: 800));
+    ContactSourceTestResult result;
+    try {
+      await switch (source) {
+        GoogleSheetsSource() => _sheets.validateSource(source),
+      };
+      result = ContactSourceTestResult.success;
+    } on GoogleSheetsException catch (e) {
+      _testErrorMessage = e.message;
+      result = ContactSourceTestResult.failed;
+    } catch (e) {
+      _testErrorMessage = 'Unexpected error: ${e.toString()}';
+      result = ContactSourceTestResult.failed;
+    }
 
     _isTesting = false;
     notifyListeners();
-
-    return switch (source) {
-      // Phase 2: replace with actual Sheets API connectivity check.
-      GoogleSheetsSource() => ContactSourceTestResult.notImplemented,
-    };
+    return result;
   }
 }

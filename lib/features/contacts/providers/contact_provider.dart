@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/contact_model.dart';
+import '../models/sync_status.dart';
 import '../services/contact_service.dart';
 import '../../../core/exceptions/app_exception.dart';
 
@@ -16,6 +17,16 @@ class ContactProvider extends ChangeNotifier {
       : _service = service ?? ContactService();
 
   final ContactService _service;
+
+  // Callback wired by main.dart to SyncProvider.enqueue — avoids a direct
+  // dependency on contact_sources from the contacts feature.
+  void Function(String contactId)? _onContactUpdated;
+
+  /// Called once in [main.dart] after both [ContactProvider] and [SyncProvider]
+  /// are created, to wire the sync trigger without creating circular imports.
+  void setSyncCallback(void Function(String contactId) callback) {
+    _onContactUpdated = callback;
+  }
 
   List<ContactModel> _contacts = [];
   List<ContactModel> get contacts => List.unmodifiable(_contacts);
@@ -74,11 +85,35 @@ class ContactProvider extends ChangeNotifier {
 
   /// Persists [updated] via [ContactService] and refreshes the in-memory list.
   ///
-  /// All screens watching this provider will automatically reflect the change.
+  /// If [updated] was imported from a contact source ([ContactModel.importedFromTableId]
+  /// is non-null), the contact is automatically marked [SyncStatus.pendingSync]
+  /// and queued for immediate background synchronization via [_onContactUpdated].
+  /// The user does not wait for the sync — the local save completes first.
+  ///
+  /// If the contact's previous sync had failed, editing it resets
+  /// [syncRetryCount] to 0 so the backoff schedule starts fresh.
   Future<void> updateContact(ContactModel updated) async {
     try {
-      await _service.update(updated);
+      // Determine the correct sync status before saving.
+      final syncStatus = updated.importedFromTableId != null
+          ? SyncStatus.pendingSync
+          : SyncStatus.noSource;
+
+      final withSync = updated.copyWith(
+        syncStatus: syncStatus,
+        // Reset retry count when the user edits the contact — fresh retries
+        // even if previous attempts had reached the failure limit.
+        syncRetryCount: 0,
+      );
+
+      await _service.update(withSync);
       await reload();
+
+      // Fire the sync callback after the local save. The callback is
+      // SyncProvider.enqueue, which starts an immediate background push.
+      if (syncStatus == SyncStatus.pendingSync) {
+        _onContactUpdated?.call(withSync.id);
+      }
     } on AppException catch (e) {
       _errorMessage = e.message;
       notifyListeners();

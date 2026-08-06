@@ -1,8 +1,10 @@
-// GENERATED CODE — DO NOT EDIT BY HAND
-// Hive type adapter for ExcelTableModel.
-// TypeId: 3
+// GENERATED CODE - DO NOT MODIFY BY HAND
 
 part of 'excel_table_model.dart';
+
+// **************************************************************************
+// TypeAdapterGenerator
+// **************************************************************************
 
 class ExcelTableModelAdapter extends TypeAdapter<ExcelTableModel> {
   @override
@@ -17,8 +19,8 @@ class ExcelTableModelAdapter extends TypeAdapter<ExcelTableModel> {
     return ExcelTableModel(
       id: fields[0] as String,
       name: fields[1] as String,
-      filePath: fields[2] as String?,
       importedAt: fields[3] as DateTime,
+      filePath: fields[2] as String?,
       rowCount: fields[4] as int?,
     );
   }

@@ -82,6 +82,7 @@ final class GoogleSheetsSource extends ContactSource {
     required this.spreadsheetUrl,
     required this.worksheetName,
     required this.columnMapping,
+    this.hasHeaderRow = true,
   });
 
   /// The JSON type key written to and read from persisted data.
@@ -93,6 +94,12 @@ final class GoogleSheetsSource extends ContactSource {
 
   /// The name of the worksheet tab to read from (e.g., 'Sheet1', 'Leads').
   final String worksheetName;
+
+  /// Whether the first row of [worksheetName] is a header row.
+  ///
+  /// When true, [GoogleSheetsIntegration.readRows] skips row 1 during import.
+  /// Defaults to true for backward compatibility with pre-Phase-2 stored configs.
+  final bool hasHeaderRow;
 
   /// Maps each [ContactField] to a spreadsheet column identifier (e.g., 'A').
   ///
@@ -111,6 +118,7 @@ final class GoogleSheetsSource extends ContactSource {
       'displayName': displayName,
       'spreadsheetUrl': spreadsheetUrl,
       'worksheetName': worksheetName,
+      'hasHeaderRow': hasHeaderRow,
       // Serialize enum keys by their .name string so the JSON is readable
       // and forward-compatible with new enum values.
       'columnMapping': columnMapping.map(
@@ -141,6 +149,8 @@ final class GoogleSheetsSource extends ContactSource {
       displayName: json['displayName'] as String,
       spreadsheetUrl: json['spreadsheetUrl'] as String,
       worksheetName: json['worksheetName'] as String,
+      // Default true for backward compatibility with pre-Phase-2 stored configs.
+      hasHeaderRow: json['hasHeaderRow'] as bool? ?? true,
       columnMapping: columnMapping,
     );
   }
@@ -151,6 +161,7 @@ final class GoogleSheetsSource extends ContactSource {
     String? spreadsheetUrl,
     String? worksheetName,
     Map<ContactField, String>? columnMapping,
+    bool? hasHeaderRow,
   }) {
     return GoogleSheetsSource(
       id: id,
@@ -158,6 +169,7 @@ final class GoogleSheetsSource extends ContactSource {
       spreadsheetUrl: spreadsheetUrl ?? this.spreadsheetUrl,
       worksheetName: worksheetName ?? this.worksheetName,
       columnMapping: columnMapping ?? Map.from(this.columnMapping),
+      hasHeaderRow: hasHeaderRow ?? this.hasHeaderRow,
     );
   }
 }

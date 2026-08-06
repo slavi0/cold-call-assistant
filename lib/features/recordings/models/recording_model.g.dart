@@ -1,8 +1,10 @@
-// GENERATED CODE — DO NOT EDIT BY HAND
-// Hive type adapter for RecordingModel.
-// TypeId: 2
+// GENERATED CODE - DO NOT MODIFY BY HAND
 
 part of 'recording_model.dart';
+
+// **************************************************************************
+// TypeAdapterGenerator
+// **************************************************************************
 
 class RecordingModelAdapter extends TypeAdapter<RecordingModel> {
   @override
@@ -55,32 +57,6 @@ class RecordingModelAdapter extends TypeAdapter<RecordingModel> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is RecordingModelAdapter &&
-          runtimeType == other.runtimeType &&
-          typeId == other.typeId;
-}
-
-// Hive type adapter for TranscriptStatus enum.
-class TranscriptStatusAdapter extends TypeAdapter<TranscriptStatus> {
-  @override
-  final int typeId = 13;
-
-  @override
-  TranscriptStatus read(BinaryReader reader) {
-    return TranscriptStatus.values[reader.readByte()];
-  }
-
-  @override
-  void write(BinaryWriter writer, TranscriptStatus obj) {
-    writer.writeByte(obj.index);
-  }
-
-  @override
-  int get hashCode => typeId.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is TranscriptStatusAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

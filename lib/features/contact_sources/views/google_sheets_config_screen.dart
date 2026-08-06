@@ -4,6 +4,7 @@ import '../models/contact_field.dart';
 import '../models/contact_source.dart';
 import '../models/contact_source_test_result.dart';
 import '../providers/contact_source_provider.dart';
+import 'google_account_banner.dart';
 
 /// Form screen for creating or editing a [GoogleSheetsSource] configuration.
 ///
@@ -41,6 +42,7 @@ class _GoogleSheetsConfigScreenState
 
   GoogleSheetsSource? _existingSource;
   bool _initialized = false;
+  bool _hasHeaderRow = true;
 
   @override
   void didChangeDependencies() {
@@ -61,6 +63,7 @@ class _GoogleSheetsConfigScreenState
         _displayNameController.text = args.displayName;
         _urlController.text = args.spreadsheetUrl;
         _worksheetController.text = args.worksheetName;
+        _hasHeaderRow = args.hasHeaderRow;
         for (final entry in args.columnMapping.entries) {
           _mappingControllers[entry.key]?.text = entry.value;
         }
@@ -79,14 +82,13 @@ class _GoogleSheetsConfigScreenState
     super.dispose();
   }
 
-  bool get _isEditing => _existingSource != null;
-
   @override
   Widget build(BuildContext context) {
+    final isEditing = _existingSource != null;
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          _isEditing ? 'Edit Google Sheets' : 'New Google Sheets Source',
+          isEditing ? 'Edit Google Sheets' : 'New Google Sheets Source',
         ),
         centerTitle: true,
       ),
@@ -95,6 +97,8 @@ class _GoogleSheetsConfigScreenState
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
+            // Show auth state so the user can sign in without leaving.
+            const GoogleAccountBanner(),
             _SectionHeader(
               icon: Icons.badge_rounded,
               label: 'Source Details',
@@ -110,6 +114,18 @@ class _GoogleSheetsConfigScreenState
             _buildUrlField(),
             const SizedBox(height: 16),
             _buildWorksheetField(),
+            const SizedBox(height: 16),
+            // Header row toggle
+            SwitchListTile(
+              value: _hasHeaderRow,
+              onChanged: (v) => setState(() => _hasHeaderRow = v),
+              title: const Text('First row is a header'),
+              subtitle: const Text(
+                'Enable if row 1 contains column labels (Name, Phone, etc.). '
+                'The header row will be skipped during import.',
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
             const SizedBox(height: 28),
             _SectionHeader(
               icon: Icons.swap_horiz_rounded,
@@ -309,16 +325,15 @@ class _GoogleSheetsConfigScreenState
 
     final (message, color) = switch (result) {
       ContactSourceTestResult.success => (
-          'Connection successful!',
+          'Connection successful! The spreadsheet and worksheet are accessible.',
           Colors.green,
         ),
       ContactSourceTestResult.failed => (
-          'Connection failed. Please check your settings.',
+          provider.testErrorMessage ?? 'Connection failed. Please check your settings.',
           Colors.red,
         ),
       ContactSourceTestResult.notImplemented => (
-          'Test connection is not yet available for Google Sheets. '
-              'It will be enabled when the import feature is added.',
+          'Test connection is not yet available for this source type.',
           Colors.orange,
         ),
     };
@@ -341,7 +356,7 @@ class _GoogleSheetsConfigScreenState
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
-    if (_isEditing) {
+    if (_existingSource != null) {
       await provider.updateSource(source);
     } else {
       await provider.addSource(source);
@@ -376,6 +391,7 @@ class _GoogleSheetsConfigScreenState
           : _displayNameController.text.trim(),
       spreadsheetUrl: _urlController.text.trim(),
       worksheetName: _worksheetController.text.trim(),
+      hasHeaderRow: _hasHeaderRow,
       columnMapping: mapping,
     );
   }
@@ -389,6 +405,7 @@ class _GoogleSheetsConfigScreenState
       displayName: _displayNameController.text.trim(),
       spreadsheetUrl: _urlController.text.trim(),
       worksheetName: _worksheetController.text.trim(),
+      hasHeaderRow: _hasHeaderRow,
       columnMapping: mapping,
     );
   }

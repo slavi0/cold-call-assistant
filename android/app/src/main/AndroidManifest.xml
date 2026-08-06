@@ -3,6 +3,9 @@
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
+    <!-- Required for all network calls (Google Sheets API) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!--
         Required to draw the floating overlay button above all other apps
         (including the system Phone dialer) while a cold-call sequence is active.

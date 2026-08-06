@@ -1,8 +1,10 @@
-// GENERATED CODE — DO NOT EDIT BY HAND
-// Hive type adapter for CallModel.
-// TypeId: 1
+// GENERATED CODE - DO NOT MODIFY BY HAND
 
 part of 'call_model.dart';
+
+// **************************************************************************
+// TypeAdapterGenerator
+// **************************************************************************
 
 class CallModelAdapter extends TypeAdapter<CallModel> {
   @override
@@ -18,9 +20,9 @@ class CallModelAdapter extends TypeAdapter<CallModel> {
       id: fields[0] as String,
       contactId: fields[1] as String,
       startTime: fields[2] as DateTime,
-      endTime: fields[3] as DateTime?,
       direction: fields[4] as CallDirection,
       outcome: fields[5] as CallOutcome,
+      endTime: fields[3] as DateTime?,
       notes: fields[6] as String?,
       recordingId: fields[7] as String?,
     );
@@ -55,58 +57,6 @@ class CallModelAdapter extends TypeAdapter<CallModel> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is CallModelAdapter &&
-          runtimeType == other.runtimeType &&
-          typeId == other.typeId;
-}
-
-// Hive type adapter for CallDirection enum.
-class CallDirectionAdapter extends TypeAdapter<CallDirection> {
-  @override
-  final int typeId = 11;
-
-  @override
-  CallDirection read(BinaryReader reader) {
-    return CallDirection.values[reader.readByte()];
-  }
-
-  @override
-  void write(BinaryWriter writer, CallDirection obj) {
-    writer.writeByte(obj.index);
-  }
-
-  @override
-  int get hashCode => typeId.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is CallDirectionAdapter &&
-          runtimeType == other.runtimeType &&
-          typeId == other.typeId;
-}
-
-// Hive type adapter for CallOutcome enum.
-class CallOutcomeAdapter extends TypeAdapter<CallOutcome> {
-  @override
-  final int typeId = 12;
-
-  @override
-  CallOutcome read(BinaryReader reader) {
-    return CallOutcome.values[reader.readByte()];
-  }
-
-  @override
-  void write(BinaryWriter writer, CallOutcome obj) {
-    writer.writeByte(obj.index);
-  }
-
-  @override
-  int get hashCode => typeId.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is CallOutcomeAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

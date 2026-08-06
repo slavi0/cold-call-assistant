@@ -59,6 +59,21 @@ dependencies:
   # Runtime permission management for Android/iOS
   permission_handler: ^11.3.1
 
+  # ── Google Sheets Integration ─────────────────────────────────────────────
+
+  # OAuth 2.0 sign-in with the user's Google account.
+  # v6 is used for its stable, well-documented API surface.
+  # Handles token caching and silent sign-in automatically.
+  google_sign_in: ^6.2.2
+
+  # Official Google API client library — provides SheetsApi for reading
+  # spreadsheet data. Only the sheets/v4 subset is imported in the codebase.
+  googleapis: ^13.2.0
+
+  # Bridges google_sign_in with googleapis by providing an extension method
+  # authenticatedClient() on GoogleSignIn that returns an http.Client ready
+  # for use with any googleapis API class.
+  extension_google_sign_in_as_googleapis_auth: ^2.0.12
 
 dev_dependencies:
   flutter_test:
@@ -71,6 +86,11 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.13.1
+
+  # Hive code generation — regenerate adapters with:
+  # flutter pub run build_runner build --delete-conflicting-outputs
+  build_runner: ^2.4.13
+  hive_generator: ^2.0.1
 
 # Launcher Icons Configuration
 flutter_launcher_icons:

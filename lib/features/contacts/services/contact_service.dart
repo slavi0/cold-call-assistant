@@ -2,6 +2,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../models/contact_model.dart';
 import '../models/contact_status.dart';
+import '../models/sync_status.dart';
 import '../../../core/exceptions/app_exception.dart';
 
 /// Handles all persistence operations for [ContactModel].
@@ -26,10 +27,12 @@ class ContactService {
     }
   }
 
-  /// Returns all stored contacts, ordered by [createdAt] descending.
+  /// Returns all stored contacts, ordered by [createdAt] ascending.
+  ///
+  /// Preserves the sequential order of imports (top row to bottom row).
   List<ContactModel> getAll() {
     final contacts = _box.values.toList();
-    contacts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    contacts.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     return contacts;
   }
 
@@ -64,6 +67,8 @@ class ContactService {
     String? notes,
     String? importedFromTableId,
     ContactStatus status = ContactStatus.callLater,
+    SyncStatus syncStatus = SyncStatus.noSource,
+    int syncRetryCount = 0,
   }) async {
     try {
       final now = DateTime.now();
@@ -78,6 +83,8 @@ class ContactService {
         createdAt: now,
         updatedAt: now,
         importedFromTableId: importedFromTableId,
+        syncStatus: syncStatus,
+        syncRetryCount: syncRetryCount,
       );
       await _box.put(contact.id, contact);
       return contact;
@@ -133,8 +140,8 @@ class ContactService {
     ];
 
     try {
-      final now = DateTime.now();
       for (final name in demoNames) {
+        final now = DateTime.now();
         final contact = ContactModel(
           id: _uuid.v4(),
           name: name,
@@ -144,6 +151,7 @@ class ContactService {
           status: ContactStatus.callLater,
         );
         await _box.put(contact.id, contact);
+        await Future.delayed(const Duration(milliseconds: 1));
       }
     } catch (e) {
       throw StorageException('Failed to seed dummy contacts.', cause: e);

@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../models/contact_source.dart';
+import '../providers/contact_import_provider.dart';
 import '../providers/contact_source_provider.dart';
+import '../../contacts/providers/contact_provider.dart';
+import 'google_account_banner.dart';
 
 /// Displays and manages the list of configured contact sources.
 ///
 /// This is the main settings screen for the contact import system.
-/// Users can add new sources, edit existing ones, and remove sources they
-/// no longer need.
+/// Each tile provides an **Edit** and an **Import** action.
 ///
 /// ## Adding a new source type to the UI
-/// 1. Add a new `_SourceOption` entry in [_AddSourceBottomSheet].
-/// 2. Add a case to `_SourceTile._sourceIcon` and `_SourceTile._sourceSubtitle`
-///    for the new [ContactSource] subtype.
-/// 3. Add a navigation case to `_SourceTile._openConfigScreen`.
-/// The compiler will flag any incomplete switch cases automatically.
+/// 1. Add a `_SourceOption` entry in [_AddSourceBottomSheet].
+/// 2. Handle the new subtype in `_SourceTile._sourceIcon`,
+///    `_SourceTile._sourceSubtitle`, and `_SourceTile._openConfigScreen`.
+/// The compiler enforces exhaustiveness on every switch.
 class ContactSourcesScreen extends StatelessWidget {
   const ContactSourcesScreen({super.key});
 
@@ -44,18 +46,29 @@ class ContactSourcesScreen extends StatelessWidget {
             );
           }
 
-          if (provider.sources.isEmpty) {
-            return const _EmptyState();
-          }
-
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: provider.sources.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final source = provider.sources[index];
-              return _SourceTile(source: source);
-            },
+          return Column(
+            children: [
+              // Sign-in banner is always visible so the user can manage their
+              // Google account without navigating elsewhere.
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: GoogleAccountBanner(),
+              ),
+              Expanded(
+                child: provider.sources.isEmpty
+                    ? const _EmptyState()
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: provider.sources.length,
+                        separatorBuilder: (_, _) =>
+                            const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final source = provider.sources[index];
+                          return _SourceTile(source: source);
+                        },
+                      ),
+              ),
+            ],
           );
         },
       ),
@@ -92,11 +105,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.cloud_off_rounded,
-              size: 80,
-              color: Colors.grey.shade300,
-            ),
+            Icon(Icons.cloud_off_rounded, size: 80, color: Colors.grey.shade300),
             const SizedBox(height: 20),
             const Text(
               'No contact sources',
@@ -166,8 +175,25 @@ class _SourceTile extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
           subtitle: Text(_sourceSubtitle()),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _openConfigScreen(context),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Import button — triggers a full import from this source.
+              IconButton(
+                icon: const Icon(Icons.download_rounded),
+                tooltip: 'Import contacts',
+                color: Colors.blue.shade600,
+                onPressed: () => _startImport(context),
+              ),
+              // Edit button — opens the source config screen.
+              IconButton(
+                icon: const Icon(Icons.edit_rounded),
+                tooltip: 'Edit',
+                color: Colors.grey.shade600,
+                onPressed: () => _openConfigScreen(context),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -181,7 +207,8 @@ class _SourceTile extends StatelessWidget {
 
   String _sourceSubtitle() {
     return switch (source) {
-      GoogleSheetsSource(worksheetName: final ws) => 'Google Sheets · $ws',
+      GoogleSheetsSource(worksheetName: final ws) =>
+        'Google Sheets · $ws',
     };
   }
 
@@ -210,8 +237,6 @@ class _SourceTile extends StatelessWidget {
   }
 
   void _openConfigScreen(BuildContext context) {
-    // Exhaustive switch — adding a new source type will produce a compile
-    // error here until the corresponding config screen and route are added.
     switch (source) {
       case GoogleSheetsSource():
         Navigator.pushNamed(
@@ -220,6 +245,108 @@ class _SourceTile extends StatelessWidget {
           arguments: source,
         );
     }
+  }
+
+  Future<void> _startImport(BuildContext context) async {
+    // Confirm before importing — imports can take several seconds for large sheets.
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import contacts?'),
+        content: Text(
+          'Import contacts from "${source.displayName}"?\n\n'
+          'Existing contacts with the same phone number will be skipped.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Import'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    final importProvider = context.read<ContactImportProvider>();
+    final contactProvider = context.read<ContactProvider>();
+
+    // Show a non-dismissible progress overlay during import.
+    if (context.mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const _ImportProgressDialog(),
+      );
+    }
+
+    final summary = await importProvider.importFromSource(
+      source: source as GoogleSheetsSource,
+      contactProvider: contactProvider,
+    );
+
+    if (!context.mounted) return;
+
+    // Close the progress overlay.
+    Navigator.pop(context);
+
+    if (summary != null) {
+      // Navigate to the summary screen.
+      Navigator.pushNamed(context, '/import-summary', arguments: summary);
+    } else {
+      // Show the error as a snackbar — it's a pre-import failure (auth, network).
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(importProvider.errorMessage ?? 'Import failed.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+}
+
+/// Non-dismissible overlay shown while an import is in progress.
+class _ImportProgressDialog extends StatelessWidget {
+  const _ImportProgressDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ContactImportProvider>(
+      builder: (context, provider, _) {
+        final total = provider.totalRows;
+        final processed = provider.processedRows;
+        final hasProgress = total > 0;
+
+        return AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 20),
+              const Text(
+                'Importing contacts…',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+              if (hasProgress) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '$processed / $total rows processed',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -255,9 +382,6 @@ class _AddSourceBottomSheet extends StatelessWidget {
               },
             ),
             const SizedBox(height: 8),
-            // Future providers are listed here to communicate the roadmap.
-            // Enable them in a future phase by replacing _ComingSoonOption
-            // with a _SourceOption that navigates to the config screen.
             const _ComingSoonOption(
               icon: Icons.hub_rounded,
               label: 'HubSpot',
@@ -309,18 +433,17 @@ class _SourceOption extends StatelessWidget {
       title: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
       trailing: const Icon(Icons.chevron_right),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      tileColor:
-          Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+      tileColor: Theme.of(context)
+          .colorScheme
+          .surfaceContainerHighest
+          .withValues(alpha: 0.4),
       onTap: onTap,
     );
   }
 }
 
 class _ComingSoonOption extends StatelessWidget {
-  const _ComingSoonOption({
-    required this.icon,
-    required this.label,
-  });
+  const _ComingSoonOption({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -332,10 +455,7 @@ class _ComingSoonOption extends StatelessWidget {
         backgroundColor: Colors.grey.shade100,
         child: Icon(icon, color: Colors.grey.shade400),
       ),
-      title: Text(
-        label,
-        style: TextStyle(color: Colors.grey.shade400),
-      ),
+      title: Text(label, style: TextStyle(color: Colors.grey.shade400)),
       trailing: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
