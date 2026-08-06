@@ -71,6 +71,44 @@ void main() {
       expect(result.country, 'BG');
     });
 
+    test("smart quote (right single quote U+2019) prefixed Bulgarian number is normalized", () {
+      // COMPANY-SPECIFIC: ’0877123456 → 0877123456 → +359877123456
+      final result = PhoneNormalizer.normalize("’0877123456");
+      expect(result.isValid, isTrue);
+      expect(result.normalizedNumber, '+359877123456');
+      expect(result.country, 'BG');
+    });
+
+    test("left single quote (U+2018) prefixed Bulgarian number is normalized", () {
+      final result = PhoneNormalizer.normalize("‘0898123456");
+      expect(result.isValid, isTrue);
+      expect(result.normalizedNumber, '+359898123456');
+      expect(result.country, 'BG');
+    });
+
+    test("numeric float string (.0 from Google Sheets double value) is normalized", () {
+      // REAL-WORLD CASE: 898123456.0 → 0898123456 → +359898123456
+      final result = PhoneNormalizer.normalize("898123456.0");
+      expect(result.isValid, isTrue);
+      expect(result.normalizedNumber, '+359898123456');
+      expect(result.country, 'BG');
+    });
+
+    test("numeric float string with 877 prefix is normalized", () {
+      // REAL-WORLD CASE: 877123456.0 → 0877123456 → +359877123456
+      final result = PhoneNormalizer.normalize("877123456.0");
+      expect(result.isValid, isTrue);
+      expect(result.normalizedNumber, '+359877123456');
+      expect(result.country, 'BG');
+    });
+
+    test("number surrounded by non-breaking spaces or unicode whitespace is normalized", () {
+      final result = PhoneNormalizer.normalize("\u00a0'0898123456\u200b");
+      expect(result.isValid, isTrue);
+      expect(result.normalizedNumber, '+359898123456');
+      expect(result.country, 'BG');
+    });
+
     // ── National format ──────────────────────────────────────────────────────
 
     test('French national format is converted to E.164', () {

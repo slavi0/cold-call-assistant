@@ -288,7 +288,13 @@ class GoogleSheetsIntegration {
       for (int i = headerOffset; i < rows.length; i++) {
         final row = rows[i];
         if (row.isEmpty) continue;
-        final cellPhone = row[0].toString();
+        final cellObj = row[0];
+        if (cellObj == null) continue;
+        var cellPhone = cellObj.toString().trim();
+        // Remove trailing .0 from numeric floating-point values
+        if (cellObj is double || cellObj is int || RegExp(r'^\d+\.0+$').hasMatch(cellPhone)) {
+          cellPhone = cellPhone.replaceAll(RegExp(r'\.0+$'), '');
+        }
         // Normalize the cell value the same way the contact's phone is normalized.
         final normalizedCell = cellPhone.replaceAll(RegExp(r'[^\d]'), '');
         if (normalizedCell == normalizedPhone) {
@@ -432,9 +438,16 @@ class GoogleSheetsIntegration {
       for (final entry in columnMapping.entries) {
         final idx = _columnLetterToIndex(entry.value);
         if (idx < row.length) {
-          final cell = row[idx]?.toString().trim() ?? '';
-          if (cell.isNotEmpty) {
-            mapped[entry.key] = cell;
+          final cellObj = row[idx];
+          if (cellObj != null) {
+            var cell = cellObj.toString().trim();
+            // Remove trailing .0 from numeric floating-point values
+            if (cellObj is double || cellObj is int || RegExp(r'^\d+\.0+$').hasMatch(cell)) {
+              cell = cell.replaceAll(RegExp(r'\.0+$'), '');
+            }
+            if (cell.isNotEmpty) {
+              mapped[entry.key] = cell;
+            }
           }
         }
       }

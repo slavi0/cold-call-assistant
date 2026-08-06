@@ -117,9 +117,24 @@ class PhoneNormalizer {
   /// Returns a [PhoneNormalizationResult] with the E.164 form and detected
   /// country on success, or an invalid result with the original input on failure.
   static PhoneNormalizationResult normalize(String raw) {
-    // ── Stage 1: company-specific prefix cleanup ─────────────────────────────
-    // COMPANY-SPECIFIC: strip apostrophe used to preserve leading zeros.
-    var working = raw.trimLeft().replaceFirst("'", '');
+    // ── Stage 1: company-specific prefix & format cleanup ─────────────────────
+    // Strip leading/trailing Unicode whitespace, non-breaking space (\u00a0),
+    // zero-width space (\u200b), and byte order mark (\ufeff).
+    var working = raw.replaceAll(
+        RegExp(r'^[\s\u00a0\u200b\ufeff]+|[\s\u00a0\u200b\ufeff]+$'), '');
+
+    // COMPANY-SPECIFIC: strip leading quotes, apostrophes (ASCII ' U+0027,
+    // right single quote ’ U+2019, left single quote ‘ U+2018, backtick ` U+0060,
+    // acute ´ U+00B4, prime ′ U+2032, modifier ʼ U+02BC, double quotes " ” “),
+    // and backslashes used in Google Sheets / Excel cell export.
+    working = working
+        .replaceAll(RegExp(r'''^['’‘`´′ʼ"”“\\]+'''), '')
+        .replaceAll(RegExp(r'''['’‘`´′ʼ"”“\\]+$'''), '')
+        .trim();
+
+    // COMPANY-SPECIFIC: strip trailing .0 or .00 if cell was converted from
+    // a double/float numeric value in Google Sheets (e.g. "898123456.0").
+    working = working.replaceAll(RegExp(r'\.0+(?=$|\s|[/,;])'), '');
 
     // ── Stage 2: split multi-number cells; keep first token ─────────────────
     // Generic: a cell may contain several numbers separated by common delimiters.
@@ -136,11 +151,21 @@ class PhoneNormalizer {
     }
 
     // ── Stage 4: company-specific digit-level fixes ──────────────────────────
-    // COMPANY-SPECIFIC: Bulgarian mobile numbers (BG) without leading zero.
-    // A 9-digit string starting with 8 or 9 is a missing-zero BG mobile.
+    // COMPANY-SPECIFIC: Bulgarian numbers (BG) without leading zero.
+    // Bulgarian mobile numbers have 10 digits starting with 07, 08, 09.
+    // When stored as numeric cells, the leading 0 is dropped leaving 9 digits
+    // starting with 7, 8, or 9.
+    // Bulgarian landline numbers have 9 digits starting with 0 (e.g. 02 Sofia).
+    // When stored as numeric cells, the leading 0 is dropped leaving 8 digits.
     var normalizedDigits = digits;
-    if (digits.length == 9 && (digits.startsWith('8') || digits.startsWith('9'))) {
-      // COMPANY-SPECIFIC: restore the leading zero.
+    if (digits.length == 9 &&
+        (digits.startsWith('7') ||
+            digits.startsWith('8') ||
+            digits.startsWith('9'))) {
+      // COMPANY-SPECIFIC: restore leading zero for mobile numbers.
+      normalizedDigits = '0$digits';
+    } else if (digits.length == 8 && RegExp(r'^[2-9]').hasMatch(digits)) {
+      // COMPANY-SPECIFIC: restore leading zero for landline numbers.
       normalizedDigits = '0$digits';
     }
 
@@ -162,7 +187,7 @@ class PhoneNormalizer {
     }
 
     // Case D: number has no leading zero/00/+ → may be a country-code-prefixed
-    // number without the '+' (e.g., 33177455329 for France).
+    // number without the '+' (e.g., 33177455329 for France or 359898123456 for BG).
     return _fromDigitsOnly(normalizedDigits, raw);
   }
 
@@ -198,16 +223,17 @@ class PhoneNormalizer {
 
   /// Interprets [national] (a number starting with '0') as a national-format
   /// number and looks up the country from a heuristic: Bulgarian national
-  /// numbers start with '08x' or '09x' (mobile) or '02' (Sofia landline);
-  /// French numbers start with '0' followed by 1–9.
+  /// numbers start with '07x', '08x', '09x' (mobile) or '02'..'09' (landline);
+  /// French numbers start with '01'..'09'.
   ///
   /// Because national format is inherently ambiguous without a default country
   /// configured by the user, this method performs a best-effort detection.
   static PhoneNormalizationResult _fromNational(String national, String raw) {
     // COMPANY-SPECIFIC: Bulgarian national → E.164 conversion.
-    // BG national mobile: 08xx xxx xxx (10 digits starting with 08/09).
-    if (national.length == 10 &&
-        (national.startsWith('08') || national.startsWith('09') || national.startsWith('02'))) {
+    // BG national mobile: 07x, 08x, 09x (10 digits starting with 07, 08, 09).
+    // BG national landline: 02 (Sofia, 9 digits), 032, 052, etc. (9 digits).
+    if ((national.length == 10 && RegExp(r'^0[789]').hasMatch(national)) ||
+        (national.length == 9 && national.startsWith('0'))) {
       final e164 = '+359${national.substring(1)}';
       return PhoneNormalizationResult(
         normalizedNumber: e164,
