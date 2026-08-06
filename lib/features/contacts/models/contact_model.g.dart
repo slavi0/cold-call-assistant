@@ -30,13 +30,15 @@ class ContactModelAdapter extends TypeAdapter<ContactModel> {
       lastCalledAt: fields[10] as DateTime?,
       syncStatus: fields[11] as SyncStatus,
       syncRetryCount: fields[12] as int,
+      rawSourcePhoneNumber: fields[13] as String?,
+      phoneCountry: fields[14] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, ContactModel obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(15)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -62,7 +64,11 @@ class ContactModelAdapter extends TypeAdapter<ContactModel> {
       ..writeByte(11)
       ..write(obj.syncStatus)
       ..writeByte(12)
-      ..write(obj.syncRetryCount);
+      ..write(obj.syncRetryCount)
+      ..writeByte(13)
+      ..write(obj.rawSourcePhoneNumber)
+      ..writeByte(14)
+      ..write(obj.phoneCountry);
   }
 
   @override

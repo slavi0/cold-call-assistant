@@ -69,6 +69,8 @@ class ContactService {
     ContactStatus status = ContactStatus.callLater,
     SyncStatus syncStatus = SyncStatus.noSource,
     int syncRetryCount = 0,
+    String? rawSourcePhoneNumber,
+    String? phoneCountry,
   }) async {
     try {
       final now = DateTime.now();
@@ -85,6 +87,8 @@ class ContactService {
         importedFromTableId: importedFromTableId,
         syncStatus: syncStatus,
         syncRetryCount: syncRetryCount,
+        rawSourcePhoneNumber: rawSourcePhoneNumber,
+        phoneCountry: phoneCountry,
       );
       await _box.put(contact.id, contact);
       return contact;

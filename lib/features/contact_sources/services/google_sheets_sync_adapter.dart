@@ -8,11 +8,20 @@ import '../../../core/exceptions/app_exception.dart';
 
 /// Implements [SyncAdapter] for Google Sheets.
 ///
-/// ## Contact matching strategy: normalized phone number
+/// ## Contact matching strategy: raw source phone number
 ///
 /// Every push operation scans the phone-number column of the configured
 /// worksheet and finds the row whose phone value, after stripping all
-/// non-digit characters, matches the local contact's phone number.
+/// non-digit characters, matches the raw source phone stored on the contact.
+///
+/// [ContactModel.rawSourcePhoneNumber] is used instead of the normalized
+/// [ContactModel.phoneNumber] because normalization can change the digit count
+/// (e.g., Bulgarian leading-zero restoration or country-code prepending) so the
+/// normalized value would no longer match what is stored in the spreadsheet cell.
+///
+/// Fallback: if [ContactModel.rawSourcePhoneNumber] is null (contacts imported
+/// before the normalization phase), [ContactModel.phoneNumber] is used instead
+/// so backwards compatibility is preserved.
 ///
 /// **Why phone number instead of row index?**
 /// - Row index breaks when someone inserts or reorders rows in the sheet.
@@ -29,7 +38,7 @@ import '../../../core/exceptions/app_exception.dart';
 ///
 /// Only [ContactField.status] and [ContactField.notes] are written back.
 /// These are the only fields the app allows the user to edit.
-/// Name, phone, email, and company are read-only from the app's perspective —
+/// Name, phone, email, and company are read-only from the app’s perspective —
 /// writing them back would risk overwriting corrections made in the sheet.
 ///
 /// If a field is not present in [GoogleSheetsSource.columnMapping], it is
@@ -79,7 +88,17 @@ class GoogleSheetsSyncAdapter implements SyncAdapter {
     }
 
     // ── Locate the row in the sheet ────────────────────────────────────────
-    final normalizedPhone = _normalizePhone(phone);
+    // Prefer rawSourcePhoneNumber for the lookup: it is the exact value the
+    // spreadsheet cell contains (before any normalization). Using the
+    // normalized phoneNumber here would break the match whenever normalization
+    // changed the digit count (e.g., leading-zero restoration for BG numbers).
+    //
+    // Fallback to phoneNumber for contacts imported before the normalization
+    // phase was introduced (rawSourcePhoneNumber is null on those records).
+    final phoneForLookup = contact.rawSourcePhoneNumber?.trim().isNotEmpty == true
+        ? contact.rawSourcePhoneNumber!.trim()
+        : phone;
+    final normalizedPhone = _normalizePhone(phoneForLookup);
     final rowNumber = await _sheets.findRowByPhone(
       source: sheetsSource,
       normalizedPhone: normalizedPhone,

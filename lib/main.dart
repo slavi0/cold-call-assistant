@@ -50,7 +50,13 @@ import 'features/contact_sources/views/import_summary_screen.dart';
 /// On a version mismatch, the contacts box is cleared and re-seeded with demo
 /// data. Any real imported contacts would be lost. Use a proper migration path
 /// before incrementing this in a production build.
-const _contactsSchemaVersion = 3;
+///
+/// Version history:
+///   1 — initial schema
+///   2 — ContactStatus enum got @HiveType annotations
+///   3 — Phase 3: added syncStatus (field 11), syncRetryCount (field 12)
+///   4 — Phone normalization: added rawSourcePhoneNumber (field 13), phoneCountry (field 14)
+const _contactsSchemaVersion = 4;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

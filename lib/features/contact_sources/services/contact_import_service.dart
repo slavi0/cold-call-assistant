@@ -4,9 +4,18 @@ import '../models/contact_source.dart';
 import '../../contacts/models/sync_status.dart';
 import '../../contacts/services/contact_service.dart';
 import '../../../core/exceptions/app_exception.dart';
+import '../../../core/utils/phone_normalizer.dart';
 
 /// Converts [ContactField] data rows into [ContactModel] records and persists
 /// them using [ContactService].
+///
+/// ## Phone normalization
+/// Each phone number is passed through [PhoneNormalizer.normalize] before
+/// the contact is persisted. The normalized E.164 form is stored as
+/// [ContactModel.phoneNumber]; the ISO country code is stored as
+/// [ContactModel.phoneCountry]; and the original raw value is preserved in
+/// [ContactModel.rawSourcePhoneNumber] for use by [GoogleSheetsSyncAdapter]
+/// to locate the contact's row in the source spreadsheet.
 ///
 /// ## Duplicate detection strategy
 /// A row is considered a duplicate if an existing contact in the local database
@@ -23,10 +32,9 @@ import '../../../core/exceptions/app_exception.dart';
 /// original import is fully preserved.
 ///
 /// ## Multi-phone strings
-/// Phone numbers are stored as-is. A value like "0600 123 456 / 0700 789 012"
-/// is treated as a single string and compared by exact trimmed-string equality.
-/// This is the correct behaviour for this application — the source data is
-/// trusted to be correct.
+/// Handled by [PhoneNormalizer]: only the first number is extracted and used.
+/// A value like "0600 123 456 / 0700 789 012" produces one contact with the
+/// first number. This is the correct behaviour for a one-tap calling workflow.
 ///
 /// ## Performance
 /// Rows are processed in configurable batches (default 100). After each batch,
@@ -59,6 +67,9 @@ class ContactImportService {
 
     // Build deduplication sets from a single snapshot of existing contacts.
     // Taking the snapshot once avoids N repeated database reads during import.
+    // Deduplication is performed against the NORMALIZED phone number so that
+    // format variants of the same number (e.g. '0898123456' and '+359898123456')
+    // are correctly identified as the same contact.
     final existingPhones = <String>{};
     final existingNames = <String>{};
 
@@ -92,12 +103,33 @@ class ContactImportService {
           continue;
         }
 
+        // ── Phone normalization ───────────────────────────────────────────────
+        // Normalize phone before persistence. The raw value is preserved in
+        // rawSourcePhoneNumber so the sync adapter can still locate the original
+        // row in the spreadsheet (the sheet still holds the raw form).
+        final rawPhone = phone; // save original before normalization
+        String? normalizedPhone;
+        String? phoneCountry;
+        if (phone.isNotEmpty) {
+          final result = PhoneNormalizer.normalize(phone);
+          if (result.isValid) {
+            normalizedPhone = result.normalizedNumber;
+            phoneCountry = result.country;
+          } else {
+            // Normalization failed — store the raw value unchanged rather than
+            // silently dropping it. The contact is still imported; the agent
+            // will see the raw number and can correct it manually.
+            normalizedPhone = phone;
+          }
+        }
+
         // ── Duplicate detection ──────────────────────────────────────────────
-        if (phone.isNotEmpty && existingPhones.contains(phone)) {
+        final phoneForDedup = normalizedPhone ?? '';
+        if (phoneForDedup.isNotEmpty && existingPhones.contains(phoneForDedup)) {
           skipped++;
           continue;
         }
-        if (phone.isEmpty && existingNames.contains(name.toLowerCase())) {
+        if (phoneForDedup.isEmpty && existingNames.contains(name.toLowerCase())) {
           skipped++;
           continue;
         }
@@ -106,7 +138,7 @@ class ContactImportService {
         try {
           await _contactService.create(
             name: name.isNotEmpty ? name : 'Unknown',
-            phoneNumber: phone.isNotEmpty ? phone : null,
+            phoneNumber: normalizedPhone,
             email: row[ContactField.email]?.trim(),
             company: row[ContactField.company]?.trim(),
             notes: row[ContactField.notes]?.trim(),
@@ -116,11 +148,14 @@ class ContactImportService {
             // Mark as already synced — the data just came from the sheet,
             // so there is nothing to push back until the user edits the contact.
             syncStatus: SyncStatus.synced,
+            // Preserve the raw source value for the sync adapter's row lookup.
+            rawSourcePhoneNumber: rawPhone.isNotEmpty ? rawPhone : null,
+            phoneCountry: phoneCountry,
           );
 
           // Update the in-memory dedup sets so subsequent rows in the same
           // import run do not create duplicates of contacts just added.
-          if (phone.isNotEmpty) existingPhones.add(phone);
+          if (phoneForDedup.isNotEmpty) existingPhones.add(phoneForDedup);
           if (name.isNotEmpty) existingNames.add(name.toLowerCase());
 
           imported++;

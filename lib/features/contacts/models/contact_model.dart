@@ -32,6 +32,8 @@ class ContactModel extends HiveObject {
     this.lastCalledAt,
     this.syncStatus = SyncStatus.noSource,
     this.syncRetryCount = 0,
+    this.rawSourcePhoneNumber,
+    this.phoneCountry,
   });
 
   /// RFC-4122 UUID. Using UUIDs instead of auto-increment ints makes
@@ -110,6 +112,36 @@ class ContactModel extends HiveObject {
   @HiveField(12)
   int syncRetryCount;
 
+  // ── Phone normalization fields ──────────────────────────────────────────────
+  //
+  // Added in the phone-normalization phase. Appended after all earlier fields
+  // so existing Hive records (written before this phase) still deserialize
+  // without a migration — missing fields receive null via constructor defaults.
+
+  /// The raw phone string as it appeared in the original import source
+  /// (e.g., Google Sheets cell value) **before** any normalization.
+  ///
+  /// This is the value used by [GoogleSheetsSyncAdapter] to locate the
+  /// contact's row in the spreadsheet. Because normalization can change the
+  /// digit count (e.g., Bulgarian leading-zero restoration), using the
+  /// normalized [phoneNumber] for the sheet lookup would break the row match.
+  ///
+  /// Null for contacts created before this field was added, or for contacts
+  /// created manually (not imported from a contact source).
+  @HiveField(13)
+  String? rawSourcePhoneNumber;
+
+  /// ISO 3166-1 alpha-2 country code detected from the phone number
+  /// during import (e.g., `'FR'`, `'BG'`).
+  ///
+  /// Null when the country could not be determined, or for contacts imported
+  /// before phone normalization was introduced.
+  ///
+  /// Intended for future use in country filtering, analytics, flag display,
+  /// call routing rules, and per-country billing reports.
+  @HiveField(14)
+  String? phoneCountry;
+
   /// Creates a copy of this model with updated fields.
   /// Used by providers to update state immutably.
   ///
@@ -127,6 +159,8 @@ class ContactModel extends HiveObject {
     DateTime? lastCalledAt,
     SyncStatus? syncStatus,
     int? syncRetryCount,
+    String? rawSourcePhoneNumber,
+    String? phoneCountry,
   }) {
     return ContactModel(
       id: id,
@@ -142,6 +176,8 @@ class ContactModel extends HiveObject {
       lastCalledAt: lastCalledAt ?? this.lastCalledAt,
       syncStatus: syncStatus ?? this.syncStatus,
       syncRetryCount: syncRetryCount ?? this.syncRetryCount,
+      rawSourcePhoneNumber: rawSourcePhoneNumber ?? this.rawSourcePhoneNumber,
+      phoneCountry: phoneCountry ?? this.phoneCountry,
     );
   }
 
@@ -163,6 +199,8 @@ class ContactModel extends HiveObject {
       'last_called_at': lastCalledAt?.toIso8601String(),
       'sync_status': syncStatus.name,
       'sync_retry_count': syncRetryCount,
+      'raw_source_phone_number': rawSourcePhoneNumber,
+      'phone_country': phoneCountry,
     };
   }
 }
