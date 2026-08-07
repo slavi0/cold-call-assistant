@@ -36,6 +36,7 @@ import 'features/contacts/views/post_call_review_screen.dart';
 import 'features/contact_sources/views/contact_sources_screen.dart';
 import 'features/contact_sources/views/google_sheets_config_screen.dart';
 import 'features/contact_sources/views/import_summary_screen.dart';
+import 'features/contact_sources/views/select_source_screen.dart';
 
 /// Schema version for the contacts Hive box.
 ///
@@ -229,6 +230,7 @@ class _ColdCallAssistantAppState extends State<ColdCallAssistantApp> {
         initialRoute: '/',
         routes: {
           '/': (_) => const HomeScreen(),
+          '/select-source': (_) => const SelectSourceScreen(),
           '/contacts': (_) => const ContactsScreen(),
           '/contact-detail': (_) => const ContactDetailScreen(),
           '/post-call-review': (_) => const PostCallReviewScreen(),

@@ -3,21 +3,27 @@ import 'package:provider/provider.dart';
 import '../providers/contact_provider.dart';
 import '../models/contact_model.dart';
 import '../../calls/providers/calling_sequence_provider.dart';
+import '../../contact_sources/models/contact_source.dart';
 
-/// Displays the full list of contacts and initiates the calling workflow.
+/// Displays the list of contacts for a specific [ContactSource] (or all contacts
+/// if no source is passed) and initiates the calling workflow.
 ///
-/// Two entry points:
+/// Navigation:
 /// - Tapping a contact → opens [ContactDetailScreen] in single-call mode.
-/// - "Start Calling" → opens [ContactDetailScreen] in sequence mode where
-///   the next contact is shown automatically when a call ends.
+/// - "Start Calling" → opens [ContactDetailScreen] in sequence mode for the
+///   filtered contacts of the active source.
 class ContactsScreen extends StatelessWidget {
   const ContactsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Extract optional ContactSource passed as route arguments
+    final source = ModalRoute.of(context)?.settings.arguments as ContactSource?;
+    final title = source != null ? source.displayName : 'Contacts';
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Contacts'),
+        title: Text(title),
         centerTitle: true,
       ),
       body: Consumer<ContactProvider>(
@@ -28,17 +34,24 @@ class ContactsScreen extends StatelessWidget {
 
           if (contactProvider.errorMessage != null) {
             return Center(
-              child: Text(
-                contactProvider.errorMessage!,
-                style: const TextStyle(color: Colors.red),
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Text(
+                  contactProvider.errorMessage!,
+                  style: const TextStyle(color: Colors.red, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
               ),
             );
           }
 
-          final contacts = contactProvider.contacts;
+          // Filter contacts strictly for the active source if one was passed
+          final contacts = source != null
+              ? contactProvider.getContactsForSource(source.id)
+              : contactProvider.contacts;
 
           if (contacts.isEmpty) {
-            return const Center(child: Text('No contacts found.'));
+            return _EmptyContactsView(sourceDisplayName: source?.displayName);
           }
 
           return Column(
@@ -141,14 +154,61 @@ class _StartCallingButton extends StatelessWidget {
   }
 
   void _startCallingSequence(BuildContext context) {
-    // Start the sequence in the provider — no navigation logic here.
+    // Start the sequence in the provider using only the active contacts
     context.read<CallingSequenceProvider>().startSequence(contacts);
 
-    // Navigate to the first contact's detail screen using its ID.
+    // Navigate to the first contact's detail screen using its ID
     Navigator.pushNamed(
       context,
       '/contact-detail',
       arguments: contacts.first.id,
+    );
+  }
+}
+
+class _EmptyContactsView extends StatelessWidget {
+  const _EmptyContactsView({this.sourceDisplayName});
+
+  final String? sourceDisplayName;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = sourceDisplayName != null
+        ? 'No contacts found for "$sourceDisplayName"'
+        : 'No contacts found';
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.people_outline_rounded,
+              size: 72,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 20),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Import contacts from this source in Settings to start calling.',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

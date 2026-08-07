@@ -44,11 +44,14 @@ class ContactService {
         );
   }
 
-  /// Returns all contacts imported from a specific [ExcelTableModel].
+  /// Returns all contacts imported from a specific [ContactSource] or table ID,
+  /// ordered by [createdAt] ascending.
   List<ContactModel> getByTableId(String tableId) {
-    return _box.values
+    final contacts = _box.values
         .where((c) => c.importedFromTableId == tableId)
         .toList();
+    contacts.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return contacts;
   }
 
   /// Returns all contacts with a given [status].

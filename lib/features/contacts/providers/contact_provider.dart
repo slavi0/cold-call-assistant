@@ -31,6 +31,23 @@ class ContactProvider extends ChangeNotifier {
   List<ContactModel> _contacts = [];
   List<ContactModel> get contacts => List.unmodifiable(_contacts);
 
+  /// Returns all contacts belonging to a specific [sourceId].
+  ///
+  /// Filters the in-memory contact list by [ContactModel.importedFromTableId].
+  /// Retains the original sequential creation ordering.
+  List<ContactModel> getContactsForSource(String sourceId) {
+    return _contacts
+        .where((c) => c.importedFromTableId == sourceId)
+        .toList();
+  }
+
+  /// Returns the total number of contacts imported from [sourceId].
+  int getContactCountForSource(String sourceId) {
+    return _contacts
+        .where((c) => c.importedFromTableId == sourceId)
+        .length;
+  }
+
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
