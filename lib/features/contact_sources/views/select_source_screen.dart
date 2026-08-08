@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../models/contact_source.dart';
 import '../providers/contact_source_provider.dart';
+import '../providers/sync_provider.dart';
 import '../../contacts/providers/contact_provider.dart';
+import '../../contacts/services/contact_service.dart';
 
 /// Screen allowing the user to select a configured [ContactSource] to browse
 /// its imported contacts and initiate a calling session.
@@ -63,6 +65,7 @@ class SelectSourceScreen extends StatelessWidget {
                 source: source,
                 contactCount: count,
                 onTap: () => _onSourceSelected(context, source),
+                onDelete: () => _onDeleteSource(context, source, count, contactProvider),
               );
             },
           );
@@ -78,6 +81,44 @@ class SelectSourceScreen extends StatelessWidget {
       arguments: source,
     );
   }
+
+  Future<void> _onDeleteSource(
+    BuildContext context,
+    ContactSource source,
+    int contactCount,
+    ContactProvider contactProvider,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => _DeleteSourceDialog(
+        source: source,
+        contactCount: contactCount,
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await context.read<ContactSourceProvider>().deleteSourceWithContacts(
+            source,
+            context.read<ContactService>(),
+            context.read<SyncProvider>(),
+          );
+      if (context.mounted) {
+        await context.read<ContactProvider>().reload();
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to delete "${source.displayName}". Please try again.',
+            ),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    }
+  }
 }
 
 // ── Private sub-widgets ────────────────────────────────────────────────────
@@ -87,11 +128,13 @@ class _SourceListTile extends StatelessWidget {
     required this.source,
     required this.contactCount,
     required this.onTap,
+    required this.onDelete,
   });
 
   final ContactSource source;
   final int contactCount;
   final VoidCallback onTap;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -150,7 +193,13 @@ class _SourceListTile extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
+          // Delete button — opens confirmation dialog before deleting.
+          IconButton(
+            icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade400),
+            tooltip: 'Delete source',
+            onPressed: onDelete,
+          ),
           const Icon(Icons.chevron_right_rounded, color: Colors.grey),
         ],
       ),
@@ -211,6 +260,55 @@ class _EmptySourcesView extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// A confirmation dialog for deleting a [ContactSource] and all its locally
+/// imported contacts.
+///
+/// Clearly communicates:
+/// - The source name being deleted.
+/// - How many contacts will be removed locally.
+/// - That the original Google Sheet / external source is NOT modified.
+/// - That the action cannot be undone locally.
+class _DeleteSourceDialog extends StatelessWidget {
+  const _DeleteSourceDialog({
+    required this.source,
+    required this.contactCount,
+  });
+
+  final ContactSource source;
+  final int contactCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final contactLine = contactCount > 0
+        ? '$contactCount ${contactCount == 1 ? 'locally stored contact' : 'locally stored contacts'} will also be removed.\n\n'
+        : '';
+
+    final sourceTypeNote = switch (source) {
+      GoogleSheetsSource() =>
+        'The original Google Sheet will not be changed.',
+    };
+
+    return AlertDialog(
+      title: Text('Delete "${source.displayName}"?'),
+      content: Text(
+        '$contactLine$sourceTypeNote\n\n'
+        'This action cannot be undone locally.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: TextButton.styleFrom(foregroundColor: Colors.red),
+          child: const Text('Delete Source'),
+        ),
+      ],
     );
   }
 }

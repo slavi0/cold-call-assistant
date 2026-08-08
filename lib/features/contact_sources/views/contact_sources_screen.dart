@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../models/contact_source.dart';
 import '../providers/contact_import_provider.dart';
 import '../providers/contact_source_provider.dart';
+import '../providers/sync_provider.dart';
 import '../../contacts/providers/contact_provider.dart';
+import '../../contacts/services/contact_service.dart';
 import 'google_account_banner.dart';
 
 /// Displays and manages the list of configured contact sources.
@@ -158,8 +160,33 @@ class _SourceTile extends StatelessWidget {
         child: const Icon(Icons.delete_rounded, color: Colors.white),
       ),
       confirmDismiss: (_) => _confirmDelete(context),
-      onDismissed: (_) =>
-          context.read<ContactSourceProvider>().removeSource(source.id),
+      onDismissed: (_) async {
+        // Cache provider references before the async gap to avoid
+        // BuildContext use across async gaps (use_build_context_synchronously).
+        final sourceProvider = context.read<ContactSourceProvider>();
+        final contactService = context.read<ContactService>();
+        final syncProvider = context.read<SyncProvider>();
+        final contactProvider = context.read<ContactProvider>();
+        try {
+          await sourceProvider.deleteSourceWithContacts(
+            source,
+            contactService,
+            syncProvider,
+          );
+          await contactProvider.reload();
+        } catch (_) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Failed to delete "${source.displayName}". Please try again.',
+                ),
+                backgroundColor: Colors.red.shade700,
+              ),
+            );
+          }
+        }
+      },
       child: Card(
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -213,13 +240,20 @@ class _SourceTile extends StatelessWidget {
   }
 
   Future<bool?> _confirmDelete(BuildContext context) {
+    final count = context
+        .read<ContactProvider>()
+        .getContactCountForSource(source.id);
+    final contactsNote = count > 0
+        ? '$count ${count == 1 ? 'locally stored contact' : 'locally stored contacts'} will also be removed. '
+        : '';
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Remove source?'),
+        title: Text('Delete "${source.displayName}"?'),
         content: Text(
-          'Remove "${source.displayName}"?\n\n'
-          'This does not delete any contacts that were already imported.',
+          '$contactsNote'
+          'The original Google Sheet will not be changed.\n\n'
+          'This action cannot be undone locally.',
         ),
         actions: [
           TextButton(
@@ -229,7 +263,7 @@ class _SourceTile extends StatelessWidget {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Remove'),
+            child: const Text('Delete Source'),
           ),
         ],
       ),

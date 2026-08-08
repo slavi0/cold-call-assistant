@@ -222,6 +222,9 @@ class _ColdCallAssistantAppState extends State<ColdCallAssistantApp> {
           value: _contactImportProvider,
         ),
         ChangeNotifierProvider<SyncProvider>.value(value: _syncProvider),
+        // Expose ContactService so views can pass it to deleteSourceWithContacts
+        // without creating a direct dependency between contact_sources and hive.
+        Provider<ContactService>.value(value: _contactService),
       ],
       child: MaterialApp(
         title: 'Cold Call Assistant',

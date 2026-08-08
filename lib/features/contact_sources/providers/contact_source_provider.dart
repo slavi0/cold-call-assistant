@@ -6,7 +6,9 @@ import '../models/contact_source.dart';
 import '../models/contact_source_test_result.dart';
 import '../services/contact_source_service.dart';
 import '../services/google_sheets_integration.dart';
+import '../../contacts/services/contact_service.dart';
 import '../../../core/exceptions/app_exception.dart';
+import 'sync_provider.dart';
 
 /// Manages the list of configured contact sources and Google Sign-In state.
 ///
@@ -94,6 +96,20 @@ class ContactSourceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Synchronously loads all configured sources from storage without
+  /// attempting a Google Sign-In. For use in unit tests only.
+  @visibleForTesting
+  void loadSync() {
+    try {
+      _sources = _service.loadAll();
+    } on AppException catch (e) {
+      _errorMessage = e.message;
+    } catch (_) {
+      _errorMessage = 'Failed to load contact sources.';
+    }
+    notifyListeners();
+  }
+
   // ── CRUD ───────────────────────────────────────────────────────────────────
 
   /// Persists [source] as a new entry and adds it to [sources].
@@ -125,6 +141,10 @@ class ContactSourceProvider extends ChangeNotifier {
   }
 
   /// Removes the source with [id] from storage and [sources].
+  ///
+  /// **Deprecated internal path** — this only deletes the source config.
+  /// Prefer [deleteSourceWithContacts] which also removes imported contacts
+  /// and cancels pending sync operations.
   Future<void> removeSource(String id) async {
     _errorMessage = null;
     try {
@@ -134,6 +154,54 @@ class ContactSourceProvider extends ChangeNotifier {
     } on AppException catch (e) {
       _errorMessage = e.message;
       notifyListeners();
+    }
+  }
+
+  /// Deletes [source], all of its locally imported contacts, and cancels any
+  /// pending sync operations — in that order — as a single logical operation.
+  ///
+  /// **The external source (Google Sheet, CRM, etc.) is never modified.**
+  /// Only local Hive data is removed.
+  ///
+  /// Steps:
+  /// 1. [syncProvider.cancelPendingForSource] — purges the in-memory sync
+  ///    queue so no enqueued or backoff-scheduled operation can push to the
+  ///    external source after deletion.
+  /// 2. [contactService.deleteAllForSource] — batch-deletes every contact
+  ///    whose [ContactModel.importedFromTableId] matches [source.id].
+  /// 3. [_service.delete] — removes the source configuration from Hive.
+  /// 4. Refreshes [sources] and notifies listeners.
+  ///
+  /// On failure [errorMessage] is set and the operation is rolled back as far
+  /// as possible (if step 3 fails the contacts are already deleted, but the
+  /// source config is preserved so the user can retry).
+  Future<void> deleteSourceWithContacts(
+    ContactSource source,
+    ContactService contactService,
+    SyncProvider syncProvider,
+  ) async {
+    _errorMessage = null;
+    try {
+      // Step 1: Cancel any queued sync for these contacts first.
+      syncProvider.cancelPendingForSource(source.id);
+
+      // Step 2: Delete locally imported contacts.
+      await contactService.deleteAllForSource(source.id);
+
+      // Step 3: Delete the source configuration.
+      await _service.delete(source.id);
+
+      // Step 4: Refresh in-memory list.
+      _sources = _sources.where((s) => s.id != source.id).toList();
+      notifyListeners();
+    } on AppException catch (e) {
+      _errorMessage = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _errorMessage = 'Failed to delete source: ${e.toString()}';
+      notifyListeners();
+      rethrow;
     }
   }
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../models/contact_model.dart';
@@ -18,7 +19,17 @@ class ContactService {
   static const _boxName = 'contacts';
   final _uuid = const Uuid();
 
-  Box<ContactModel> get _box => Hive.box<ContactModel>(_boxName);
+  /// The Hive box used by this service. Injected via [withBox] in tests;
+  /// resolved from the global registry in production.
+  Box<ContactModel> get _box => _injectedBox ?? Hive.box<ContactModel>(_boxName);
+  final Box<ContactModel>? _injectedBox;
+
+  ContactService() : _injectedBox = null;
+
+  /// Test-only constructor. Injects [box] directly so tests can use an
+  /// isolated in-memory box without touching the production box.
+  @visibleForTesting
+  ContactService.withBox(Box<ContactModel> box) : _injectedBox = box;
 
   /// Opens the Hive box. Must be called once during app startup before any
   /// other method on this service is used.
@@ -121,6 +132,28 @@ class ContactService {
       await _box.delete(id);
     } catch (e) {
       throw StorageException('Failed to delete contact.', cause: e);
+    }
+  }
+
+  /// Deletes all contacts imported from [tableId] in a single batch operation.
+  ///
+  /// Returns the number of contacts that were deleted. Used when removing an
+  /// entire [ContactSource] — only contacts owned by that source are affected;
+  /// contacts from other sources and manually created contacts are untouched.
+  ///
+  /// The caller is responsible for cancelling any pending sync queue entries
+  /// for these contacts *before* calling this method so that in-flight sync
+  /// operations cannot write to the external source after the records are gone.
+  Future<int> deleteAllForSource(String tableId) async {
+    try {
+      final toDelete = _box.values
+          .where((c) => c.importedFromTableId == tableId)
+          .map((c) => c.id)
+          .toList();
+      await _box.deleteAll(toDelete);
+      return toDelete.length;
+    } catch (e) {
+      throw StorageException('Failed to delete contacts for source.', cause: e);
     }
   }
 

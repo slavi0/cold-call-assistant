@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/contact_source.dart';
 import '../../../core/exceptions/app_exception.dart';
@@ -15,7 +16,15 @@ import '../../../core/exceptions/app_exception.dart';
 class ContactSourceService {
   static const _boxName = 'contact_sources';
 
-  Box<String> get _box => Hive.box<String>(_boxName);
+  Box<String> get _box => _injectedBox ?? Hive.box<String>(_boxName);
+  final Box<String>? _injectedBox;
+
+  ContactSourceService() : _injectedBox = null;
+
+  /// Test-only constructor. Injects [box] directly so tests can use an
+  /// isolated in-memory box without touching the production box.
+  @visibleForTesting
+  ContactSourceService.withBox(Box<String> box) : _injectedBox = box;
 
   /// Opens the Hive box. Must be called once during app startup before any
   /// other method on this service is used.

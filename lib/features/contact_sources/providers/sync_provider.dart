@@ -176,6 +176,23 @@ class SyncProvider extends ChangeNotifier {
     _flushQueue();
   }
 
+  /// Removes all pending queue entries for contacts belonging to [sourceId].
+  ///
+  /// Must be called *before* deleting a source and its contacts so that
+  /// in-flight or queued sync operations cannot push updates to the external
+  /// source for records that are about to be deleted.
+  ///
+  /// Any backoff timer that fires after deletion is harmless: [_syncContact]
+  /// re-reads from Hive and silently returns when the contact is not found.
+  void cancelPendingForSource(String sourceId) {
+    final idsToCancel = _contactService
+        .getByTableId(sourceId)
+        .map((c) => c.id)
+        .toSet();
+    _queue.removeAll(idsToCancel);
+    _updatePendingCount();
+  }
+
   // ── Queue processing ───────────────────────────────────────────────────────
 
   /// Triggers queue processing if not already running.
@@ -383,4 +400,16 @@ class SyncProvider extends ChangeNotifier {
     final msg = error.toString();
     return msg.length > 200 ? '${msg.substring(0, 200)}…' : msg;
   }
+
+  // ── Test helpers ────────────────────────────────────────────────────────────
+
+  /// Adds [contactId] to the internal queue WITHOUT triggering processing.
+  /// For use in unit tests only to pre-populate the queue state.
+  @visibleForTesting
+  void enqueueForTest(String contactId) => _queue.add(contactId);
+
+  /// Returns true if [contactId] is currently in the pending queue.
+  /// For use in unit tests only.
+  @visibleForTesting
+  bool queueContains(String contactId) => _queue.contains(contactId);
 }
