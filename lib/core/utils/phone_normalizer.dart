@@ -63,19 +63,78 @@ class PhoneNormalizer {
     '36': 'HU', // Hungary
     '40': 'RO', // Romania
     '380': 'UA', // Ukraine
+    '353': 'IE', // Ireland
+    '46': 'SE', // Sweden
+    '47': 'NO', // Norway
+    '45': 'DK', // Denmark
+    '358': 'FI', // Finland
+    '385': 'HR', // Croatia
+    '381': 'RS', // Serbia
+    '386': 'SI', // Slovenia
+    '389': 'MK', // North Macedonia
+    '355': 'AL', // Albania
+    '370': 'LT', // Lithuania
+    '371': 'LV', // Latvia
+    '372': 'EE', // Estonia
+    '373': 'MD', // Moldova
+    '374': 'AM', // Armenia
+    '995': 'GE', // Georgia
+    '356': 'MT', // Malta
+    '357': 'CY', // Cyprus
+    '352': 'LU', // Luxembourg
+    '354': 'IS', // Iceland
     '7': 'RU', // Russia
     // ── Americas ──
     '1': 'US', // United States / Canada (NANP)
     '52': 'MX', // Mexico
     '55': 'BR', // Brazil
     '54': 'AR', // Argentina
-    // ── Middle East / Africa ──
+    '56': 'CL', // Chile
+    '57': 'CO', // Colombia
+    '51': 'PE', // Peru
+    '58': 'VE', // Venezuela
+    '593': 'EC', // Ecuador
+    '598': 'UY', // Uruguay
+    '595': 'PY', // Paraguay
+    '502': 'GT', // Guatemala
+    '503': 'SV', // El Salvador
+    '504': 'HN', // Honduras
+    '505': 'NI', // Nicaragua
+    '506': 'CR', // Costa Rica
+    '507': 'PA', // Panama
+    '509': 'HT', // Haiti
+    '591': 'BO', // Bolivia
+    '592': 'GY', // Guyana
+    '597': 'SR', // Suriname
+    // ── Middle East & Africa ──
     '971': 'AE', // UAE
     '966': 'SA', // Saudi Arabia
+    '972': 'IL', // Israel
+    '961': 'LB', // Lebanon
+    '962': 'JO', // Jordan
+    '964': 'IQ', // Iraq
+    '965': 'KW', // Kuwait
+    '968': 'OM', // Oman
+    '974': 'QA', // Qatar
+    '973': 'BH', // Bahrain
+    '90': 'TR', // Turkey
     '20': 'EG', // Egypt
     '212': 'MA', // Morocco
     '213': 'DZ', // Algeria
     '216': 'TN', // Tunisia
+    '27': 'ZA', // South Africa
+    '254': 'KE', // Kenya
+    '234': 'NG', // Nigeria
+    '233': 'GH', // Ghana
+    '251': 'ET', // Ethiopia
+    '255': 'TZ', // Tanzania
+    '256': 'UG', // Uganda
+    '221': 'SN', // Senegal
+    '225': 'CI', // Ivory Coast
+    '237': 'CM', // Cameroon
+    '244': 'AO', // Angola
+    '260': 'ZM', // Zambia
+    '263': 'ZW', // Zimbabwe
     // ── Asia-Pacific ──
     '91': 'IN', // India
     '86': 'CN', // China
@@ -83,7 +142,146 @@ class PhoneNormalizer {
     '82': 'KR', // South Korea
     '61': 'AU', // Australia
     '64': 'NZ', // New Zealand
+    '65': 'SG', // Singapore
+    '60': 'MY', // Malaysia
+    '62': 'ID', // Indonesia
+    '63': 'PH', // Philippines
+    '66': 'TH', // Thailand
+    '84': 'VN', // Vietnam
+    '92': 'PK', // Pakistan
+    '880': 'BD', // Bangladesh
+    '94': 'LK', // Sri Lanka
+    '977': 'NP', // Nepal
+    '852': 'HK', // Hong Kong
+    '886': 'TW', // Taiwan
   };
+
+  // ── ISO 3166-1 alpha-2 Code to English Country Name Map ─────────────────────
+  static const Map<String, String> _countryNames = {
+    'AF': 'Afghanistan',
+    'AL': 'Albania',
+    'DZ': 'Algeria',
+    'AO': 'Angola',
+    'AR': 'Argentina',
+    'AM': 'Armenia',
+    'AU': 'Australia',
+    'AT': 'Austria',
+    'AZ': 'Azerbaijan',
+    'BH': 'Bahrain',
+    'BD': 'Bangladesh',
+    'BY': 'Belarus',
+    'BE': 'Belgium',
+    'BO': 'Bolivia',
+    'BA': 'Bosnia and Herzegovina',
+    'BR': 'Brazil',
+    'BG': 'Bulgaria',
+    'KH': 'Cambodia',
+    'CM': 'Cameroon',
+    'CA': 'Canada',
+    'CL': 'Chile',
+    'CN': 'China',
+    'CO': 'Colombia',
+    'CR': 'Costa Rica',
+    'HR': 'Croatia',
+    'CY': 'Cyprus',
+    'CZ': 'Czech Republic',
+    'DK': 'Denmark',
+    'EC': 'Ecuador',
+    'EG': 'Egypt',
+    'SV': 'El Salvador',
+    'EE': 'Estonia',
+    'ET': 'Ethiopia',
+    'FI': 'Finland',
+    'FR': 'France',
+    'GE': 'Georgia',
+    'DE': 'Germany',
+    'GH': 'Ghana',
+    'GR': 'Greece',
+    'GT': 'Guatemala',
+    'GY': 'Guyana',
+    'HT': 'Haiti',
+    'HN': 'Honduras',
+    'HK': 'Hong Kong',
+    'HU': 'Hungary',
+    'IS': 'Iceland',
+    'IN': 'India',
+    'ID': 'Indonesia',
+    'IQ': 'Iraq',
+    'IE': 'Ireland',
+    'IL': 'Israel',
+    'IT': 'Italy',
+    'CI': 'Ivory Coast',
+    'JP': 'Japan',
+    'JO': 'Jordan',
+    'KE': 'Kenya',
+    'KW': 'Kuwait',
+    'LV': 'Latvia',
+    'LB': 'Lebanon',
+    'LT': 'Lithuania',
+    'LU': 'Luxembourg',
+    'MK': 'North Macedonia',
+    'MY': 'Malaysia',
+    'MT': 'Malta',
+    'MX': 'Mexico',
+    'MD': 'Moldova',
+    'MA': 'Morocco',
+    'NP': 'Nepal',
+    'NL': 'Netherlands',
+    'NZ': 'New Zealand',
+    'NI': 'Nicaragua',
+    'NG': 'Nigeria',
+    'NO': 'Norway',
+    'OM': 'Oman',
+    'PK': 'Pakistan',
+    'PA': 'Panama',
+    'PY': 'Paraguay',
+    'PE': 'Peru',
+    'PH': 'Philippines',
+    'PL': 'Poland',
+    'PT': 'Portugal',
+    'QA': 'Qatar',
+    'RO': 'Romania',
+    'RU': 'Russia',
+    'SA': 'Saudi Arabia',
+    'SN': 'Senegal',
+    'RS': 'Serbia',
+    'SG': 'Singapore',
+    'SK': 'Slovakia',
+    'SI': 'Slovenia',
+    'ZA': 'South Africa',
+    'KR': 'South Korea',
+    'ES': 'Spain',
+    'LK': 'Sri Lanka',
+    'SR': 'Suriname',
+    'SE': 'Sweden',
+    'CH': 'Switzerland',
+    'TW': 'Taiwan',
+    'TZ': 'Tanzania',
+    'TH': 'Thailand',
+    'TN': 'Tunisia',
+    'TR': 'Turkey',
+    'UG': 'Uganda',
+    'UA': 'Ukraine',
+    'AE': 'United Arab Emirates',
+    'GB': 'United Kingdom',
+    'US': 'United States',
+    'UY': 'Uruguay',
+    'VE': 'Venezuela',
+    'VN': 'Vietnam',
+    'ZM': 'Zambia',
+    'ZW': 'Zimbabwe',
+  };
+
+  /// Returns the human-readable English country name for an ISO 3166-1 alpha-2
+  /// country code (e.g., `'BG'` → `'Bulgaria'`, `'FR'` → `'France'`, `'GB'` → `'United Kingdom'`).
+  ///
+  /// Returns `'Unknown'` if [countryCode] is null, empty, or not recognized.
+  static String getCountryName(String? countryCode) {
+    if (countryCode == null || countryCode.trim().isEmpty) {
+      return 'Unknown';
+    }
+    return _countryNames[countryCode.trim().toUpperCase()] ?? 'Unknown';
+  }
 
   // ── COMPANY-SPECIFIC ────────────────────────────────────────────────────────
   //

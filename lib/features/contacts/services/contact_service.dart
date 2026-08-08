@@ -4,6 +4,7 @@ import '../models/contact_model.dart';
 import '../models/contact_status.dart';
 import '../models/sync_status.dart';
 import '../../../core/exceptions/app_exception.dart';
+import '../../../core/utils/phone_normalizer.dart';
 
 /// Handles all persistence operations for [ContactModel].
 ///
@@ -133,6 +134,8 @@ class ContactService {
     if (_box.isNotEmpty) return;
 
     const demoPhone = '+33177455329';
+    final demoNormal = PhoneNormalizer.normalize(demoPhone);
+    final demoCountry = demoNormal.isValid ? demoNormal.country : 'FR';
     const demoNames = [
       'Alice Martin',
       'Bob Dupont',
@@ -153,6 +156,7 @@ class ContactService {
           id: _uuid.v4(),
           name: name,
           phoneNumber: demoPhone,
+          phoneCountry: demoCountry,
           createdAt: now,
           updatedAt: now,
           status: ContactStatus.callLater,
@@ -162,6 +166,30 @@ class ContactService {
       }
     } catch (e) {
       throw StorageException('Failed to seed dummy contacts.', cause: e);
+    }
+  }
+
+  /// Inspects all stored contacts and auto-populates [phoneCountry] for any
+  /// contacts imported prior to the country-detection feature.
+  ///
+  /// Reuses [PhoneNormalizer.normalize] as the single source of truth for
+  /// country detection. Performs batch updates directly on Hive.
+  Future<void> autoPopulateMissingCountries() async {
+    try {
+      for (final contact in _box.values) {
+        if (contact.phoneCountry == null || contact.phoneCountry!.isEmpty) {
+          final phone = contact.phoneNumber ?? contact.rawSourcePhoneNumber;
+          if (phone != null && phone.isNotEmpty) {
+            final result = PhoneNormalizer.normalize(phone);
+            if (result.isValid && result.country != null) {
+              contact.phoneCountry = result.country;
+              await _box.put(contact.id, contact);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Swallowing non-fatal error during auto-population to avoid blocking startup
     }
   }
 }

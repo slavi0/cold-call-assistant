@@ -163,6 +163,40 @@ void main() {
       expect(PhoneNormalizer.normalize('+359898123456').country, 'BG');
     });
 
+    test('UK number returns country GB', () {
+      expect(PhoneNormalizer.normalize('+442079460912').country, 'GB');
+    });
+
+    test('US number returns country US', () {
+      expect(PhoneNormalizer.normalize('+12125550199').country, 'US');
+    });
+
+    test('German number returns country DE', () {
+      expect(PhoneNormalizer.normalize('+4930123456').country, 'DE');
+    });
+
+    // ── Country Name Resolution ──────────────────────────────────────────────
+
+    test('getCountryName maps ISO alpha-2 codes to full country names', () {
+      expect(PhoneNormalizer.getCountryName('BG'), 'Bulgaria');
+      expect(PhoneNormalizer.getCountryName('FR'), 'France');
+      expect(PhoneNormalizer.getCountryName('GB'), 'United Kingdom');
+      expect(PhoneNormalizer.getCountryName('US'), 'United States');
+      expect(PhoneNormalizer.getCountryName('DE'), 'Germany');
+    });
+
+    test('getCountryName handles lowercase codes and whitespace', () {
+      expect(PhoneNormalizer.getCountryName(' bg '), 'Bulgaria');
+      expect(PhoneNormalizer.getCountryName('fr'), 'France');
+    });
+
+    test('getCountryName returns Unknown for null, empty, or unmapped codes', () {
+      expect(PhoneNormalizer.getCountryName(null), 'Unknown');
+      expect(PhoneNormalizer.getCountryName(''), 'Unknown');
+      expect(PhoneNormalizer.getCountryName('   '), 'Unknown');
+      expect(PhoneNormalizer.getCountryName('XX'), 'Unknown');
+    });
+
     // ── Invalid / edge cases ─────────────────────────────────────────────────
 
     test('empty string returns invalid result', () {

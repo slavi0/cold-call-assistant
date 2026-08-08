@@ -64,6 +64,7 @@ class ContactProvider extends ChangeNotifier {
 
     try {
       await _service.seedDummyContactsIfEmpty();
+      await _service.autoPopulateMissingCountries();
       _contacts = _service.getAll();
     } on AppException catch (e) {
       _errorMessage = e.message;

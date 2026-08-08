@@ -81,7 +81,9 @@ Future<void> main() async {
   Hive
     ..registerAdapter(ContactModelAdapter())
     ..registerAdapter(ContactStatusAdapter())
-    ..registerAdapter(SyncStatusAdapter()) // Phase 3: must register before openBox
+    ..registerAdapter(
+      SyncStatusAdapter(),
+    ) // Phase 3: must register before openBox
     ..registerAdapter(CallModelAdapter())
     ..registerAdapter(CallDirectionAdapter())
     ..registerAdapter(CallOutcomeAdapter())
@@ -206,7 +208,9 @@ class _ColdCallAssistantAppState extends State<ColdCallAssistantApp> {
     return MultiProvider(
       providers: [
         // Providers without cross-references use the standard create pattern.
-        ChangeNotifierProvider(create: (_) => PhoneCallProvider()..initialize()),
+        ChangeNotifierProvider(
+          create: (_) => PhoneCallProvider()..initialize(),
+        ),
         ChangeNotifierProvider(create: (_) => CallingSequenceProvider()),
         // Providers created in initState use .value so the framework does
         // not dispose them when their ChangeNotifierProvider is removed.

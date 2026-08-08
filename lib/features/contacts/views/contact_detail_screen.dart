@@ -6,6 +6,7 @@ import '../providers/contact_provider.dart';
 import '../../calls/providers/phone_call_provider.dart';
 import '../../calls/providers/calling_sequence_provider.dart';
 import '../../calls/services/phone_call_service.dart';
+import '../../../core/utils/phone_normalizer.dart';
 
 /// Displays a single contact's details, a Call button, and Prev/Next navigation.
 ///
@@ -261,6 +262,10 @@ class _ContactInfoCard extends StatelessWidget {
             icon: Icons.phone,
             label: 'Phone',
             value: contact.phoneNumber ?? '—'),
+        _InfoRow(
+            icon: Icons.public_rounded,
+            label: 'Country',
+            value: PhoneNormalizer.getCountryName(contact.phoneCountry)),
         if (contact.email != null)
           _InfoRow(
               icon: Icons.email, label: 'Email', value: contact.email!),
