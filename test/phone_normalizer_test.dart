@@ -37,12 +37,28 @@ void main() {
 
     // ── Bulgarian leading zero missing ───────────────────────────────────────
 
-    test('Bulgarian number missing leading zero (9-digit starting with 8) is fixed', () {
-      // COMPANY-SPECIFIC rule: 898123456 → 0898123456 → +359898123456
-      final result = PhoneNormalizer.normalize('898123456');
+    test('Bulgarian number missing leading zero (894370742) is normalized to +359894370742', () {
+      final result = PhoneNormalizer.normalize('894370742');
       expect(result.isValid, isTrue);
-      expect(result.normalizedNumber, '+359898123456');
+      expect(result.normalizedNumber, '+359894370742');
       expect(result.country, 'BG');
+      expect(result.rawFirst, '894370742');
+    });
+
+    test('Bulgarian number missing leading zero (884370742) is normalized to +359884370742', () {
+      final result = PhoneNormalizer.normalize('884370742');
+      expect(result.isValid, isTrue);
+      expect(result.normalizedNumber, '+359884370742');
+      expect(result.country, 'BG');
+      expect(result.rawFirst, '884370742');
+    });
+
+    test('Bulgarian number missing leading zero (874370742) is normalized to +359874370742', () {
+      final result = PhoneNormalizer.normalize('874370742');
+      expect(result.isValid, isTrue);
+      expect(result.normalizedNumber, '+359874370742');
+      expect(result.country, 'BG');
+      expect(result.rawFirst, '874370742');
     });
 
     test('Bulgarian number missing leading zero (9-digit starting with 9) is fixed', () {

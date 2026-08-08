@@ -169,20 +169,30 @@ class ContactService {
     }
   }
 
-  /// Inspects all stored contacts and auto-populates [phoneCountry] for any
-  /// contacts imported prior to the country-detection feature.
+  /// Inspects all stored contacts and auto-populates [phoneCountry] and
+  /// normalizes [phoneNumber] for any contacts imported prior to or with un-normalized numbers.
   ///
-  /// Reuses [PhoneNormalizer.normalize] as the single source of truth for
-  /// country detection. Performs batch updates directly on Hive.
+  /// Preserves [rawSourcePhoneNumber] as the original raw value for source matching.
+  /// Reuses [PhoneNormalizer.normalize] as the single source of truth.
   Future<void> autoPopulateMissingCountries() async {
     try {
       for (final contact in _box.values) {
-        if (contact.phoneCountry == null || contact.phoneCountry!.isEmpty) {
-          final phone = contact.phoneNumber ?? contact.rawSourcePhoneNumber;
-          if (phone != null && phone.isNotEmpty) {
-            final result = PhoneNormalizer.normalize(phone);
-            if (result.isValid && result.country != null) {
+        // Ensure rawSourcePhoneNumber is preserved before updating phoneNumber
+        final rawPhone = contact.rawSourcePhoneNumber ?? contact.phoneNumber;
+        if (rawPhone != null && rawPhone.isNotEmpty) {
+          contact.rawSourcePhoneNumber ??= rawPhone;
+          final result = PhoneNormalizer.normalize(rawPhone);
+          if (result.isValid) {
+            var updated = false;
+            if (contact.phoneCountry != result.country && result.country != null) {
               contact.phoneCountry = result.country;
+              updated = true;
+            }
+            if (contact.phoneNumber != result.normalizedNumber && result.normalizedNumber != null) {
+              contact.phoneNumber = result.normalizedNumber;
+              updated = true;
+            }
+            if (updated) {
               await _box.put(contact.id, contact);
             }
           }
